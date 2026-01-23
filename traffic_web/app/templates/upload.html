@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Upload</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="nav">
+    <div class="brand">Traffic Tracker</div>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/upload">Upload</a>
+      <a href="/jobs">Videos</a>
+    </div>
+  </div>
+
+  <div class="container">
+    <span class="tag">Step 1</span>
+    <h1>Upload Video</h1>
+    <p>Choose a video file to start a new job.</p>
+
+    <div class="card">
+      <form action="/upload" method="post" enctype="multipart/form-data">
+        <label for="file"><b>Video File</b></label>
+        <input type="file" id="file" name="file" accept="video/*" required />
+        <div style="margin-top:16px;">
+          <button class="btn btn-primary" type="submit">Upload</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

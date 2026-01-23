@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Traffic Tracker</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="nav">
+    <div class="brand">Traffic Tracker</div>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/upload">Upload</a>
+      <a href="/jobs">Videos</a>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="hero">
+      <div class="hero-card card">
+        <span class="tag">Traffic Analytics</span>
+        <h1>Traffic Tracker</h1>
+        <p>Upload footage, draw zones, and generate counts, OD flows, and reports.</p>
+        <div style="margin-top:16px;">
+          <a class="btn btn-primary" href="/upload">Upload Video</a>
+          <a class="btn btn-ghost" href="/jobs" style="margin-left:8px;">Open Videos</a>
+        </div>
+      </div>
+
+      <div class="hero-list">
+        <div class="card">
+          <h3>Draw Zones on the Frame</h3>
+          <p>Left click to add points, right click to finish the polygon.</p>
+        </div>
+        <div class="card">
+          <h3>Overlay Video + Heatmap</h3>
+          <p>Track IDs, trajectories, and a visual heatmap summary.</p>
+        </div>
+        <div class="card">
+          <h3>Reports</h3>
+          <p>Download results.json and report.xlsx with OD matrix.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

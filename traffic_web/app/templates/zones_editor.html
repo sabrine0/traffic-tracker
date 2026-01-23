@@ -1,0 +1,303 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Zones Editor</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="nav">
+    <div class="brand">Traffic Tracker</div>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/upload">Upload</a>
+      <a href="/jobs">Videos</a>
+    </div>
+  </div>
+
+  <div class="container">
+    <span class="tag">Video {{ job_id }}</span>
+    <h1>Zones Editor</h1>
+    <p>Left click to add a point. Right click to finish the polygon. Use Undo to remove the last point.</p>
+
+    <div class="zones-layout">
+      <div class="card">
+        <canvas id="c"></canvas>
+        <p style="font-size:12px; margin-top:10px;">
+          Entry zones are blue, Exit zones are red, Active drawing is green.
+        </p>
+      </div>
+
+      <div class="panel">
+        <h3>Controls</h3>
+
+        <label><b>Type</b></label>
+        <select id="zoneType">
+          <option value="entry">Entry</option>
+          <option value="exit">Exit</option>
+        </select>
+
+        <div style="margin-top:12px;">
+          <label><b>Zone</b></label>
+          <select id="zoneName"></select>
+        </div>
+
+        <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn btn-outline" id="addZone">Add Zone</button>
+        </div>
+
+        <p id="activeZone" style="margin-top:12px;">Active: entry V1</p>
+
+        <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn btn-dark" id="finish">Finish Polygon</button>
+          <button class="btn btn-ghost" id="clear">Clear Active Zone</button>
+        </div>
+
+        <div style="margin-top:12px;">
+          <button class="btn btn-outline" id="undo">Undo Point</button>
+        </div>
+
+        <div style="margin-top:18px; display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn btn-primary" id="save">Save Zones</button>
+          <button class="btn btn-ghost" onclick="window.location.href='/results/{{job_id}}'">Back</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const jobId = "{{ job_id }}";
+  const initialZones = {{ zones_json | tojson }};
+  const zoneLabels = {{ zone_labels | default([]) | tojson }};
+  const imgUrl = "{{ frame_url }}";
+
+  const canvas = document.getElementById("c");
+  const ctx = canvas.getContext("2d");
+
+  const zoneTypeSel = document.getElementById("zoneType");
+  const zoneNameSel = document.getElementById("zoneName");
+  const addZoneBtn = document.getElementById("addZone");
+  const activeZone = document.getElementById("activeZone");
+
+  let zones = initialZones || {};
+  let drawing = [];
+  let img = new Image();
+  let zoneKeys = [];
+
+  function isZoneLabel(name) {
+    return /^[VP]\d+$/i.test(String(name));
+  }
+
+  function sanitizeZones() {
+    zones.entry ||= {};
+    zones.exit ||= {};
+    for (const k of Object.keys(zones.entry)) {
+      if (!isZoneLabel(k)) delete zones.entry[k];
+    }
+    for (const k of Object.keys(zones.exit)) {
+      if (!isZoneLabel(k)) delete zones.exit[k];
+    }
+  }
+
+  function ensureKeys() {
+    if (!zoneLabels.length) {
+      const fallback = [];
+      for (let i = 1; i <= 13; i++) {
+        fallback.push(`V${i}`);
+      }
+      for (let i = 1; i <= 13; i++) {
+        fallback.push(`P${i}`);
+      }
+      zoneLabels.push(...fallback);
+    }
+    for (let i = zoneLabels.length - 1; i >= 0; i--) {
+      if (!isZoneLabel(zoneLabels[i])) zoneLabels.splice(i, 1);
+    }
+    sanitizeZones();
+    for (const k of zoneLabels) {
+      zones.entry[k] ||= [];
+      zones.exit[k] ||= [];
+    }
+    for (const k of Object.keys(zones.entry)) {
+      if (isZoneLabel(k)) zones.exit[k] ||= [];
+    }
+    for (const k of Object.keys(zones.exit)) {
+      if (isZoneLabel(k)) zones.entry[k] ||= [];
+    }
+  }
+
+  function refreshZoneOptions() {
+    zoneKeys = [];
+    for (const k of zoneLabels) {
+      if (isZoneLabel(k) && !zoneKeys.includes(k)) zoneKeys.push(k);
+    }
+    for (const k of Object.keys(zones.entry || {})) {
+      if (isZoneLabel(k) && !zoneKeys.includes(k)) zoneKeys.push(k);
+    }
+    for (const k of Object.keys(zones.exit || {})) {
+      if (isZoneLabel(k) && !zoneKeys.includes(k)) zoneKeys.push(k);
+    }
+    zoneNameSel.innerHTML = "";
+    for (const k of zoneKeys) {
+      const opt = document.createElement("option");
+      opt.value = k;
+      opt.textContent = k;
+      zoneNameSel.appendChild(opt);
+    }
+    if (zoneKeys.length && !zoneNameSel.value) {
+      zoneNameSel.value = zoneKeys[0];
+    }
+  }
+
+  function updateActiveLabel() {
+    const t = zoneTypeSel.value;
+    const z = zoneNameSel.value;
+    activeZone.textContent = `Active: ${t} ${z}`;
+  }
+
+  function getNextZoneName() {
+    const current = zoneNameSel.value || "V1";
+    const match = /^([A-Za-z])(\d+)$/.exec(String(current));
+    const prefix = match && match[1].toUpperCase() === "P" ? "P" : "V";
+    const used = new Set();
+    const re = new RegExp(`^${prefix}(\\d+)$`, "i");
+    for (const k of zoneKeys) {
+      const zmatch = re.exec(String(k));
+      if (zmatch) used.add(parseInt(zmatch[1], 10));
+    }
+    let n = 1;
+    while (used.has(n)) n += 1;
+    return `${prefix}${n}`;
+  }
+
+  function addZone(name) {
+    if (!name) return;
+    if (!isZoneLabel(name)) return;
+    if (!zoneLabels.includes(name)) zoneLabels.push(name);
+    zones.entry ||= {};
+    zones.exit ||= {};
+    zones.entry[name] ||= [];
+    zones.exit[name] ||= [];
+    refreshZoneOptions();
+    zoneNameSel.value = name;
+    updateActiveLabel();
+    drawAll();
+  }
+
+  ensureKeys();
+  refreshZoneOptions();
+  updateActiveLabel();
+
+  zoneTypeSel.addEventListener("change", updateActiveLabel);
+  zoneNameSel.addEventListener("change", updateActiveLabel);
+  if (addZoneBtn) {
+    addZoneBtn.addEventListener("click", () => {
+      addZone(getNextZoneName());
+    });
+  }
+
+  function drawPoly(poly, strokeStyle) {
+    if (!poly || poly.length < 2) return;
+    ctx.strokeStyle = strokeStyle;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(poly[0][0], poly[0][1]);
+    for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i][0], poly[i][1]);
+    ctx.closePath();
+    ctx.stroke();
+  }
+
+  function drawAll() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0);
+
+    for (const k of zoneKeys) drawPoly(zones.entry[k], "rgba(0,0,255,0.9)");
+    for (const k of zoneKeys) drawPoly(zones.exit[k], "rgba(255,0,0,0.9)");
+
+    if (drawing.length >= 1) {
+      ctx.strokeStyle = "rgba(0,180,0,0.9)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(drawing[0][0], drawing[0][1]);
+      for (let i = 1; i < drawing.length; i++) ctx.lineTo(drawing[i][0], drawing[i][1]);
+      ctx.stroke();
+
+      for (const p of drawing) {
+        ctx.fillStyle = "rgba(0,180,0,0.9)";
+        ctx.beginPath();
+        ctx.arc(p[0], p[1], 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  function finishPolygon() {
+    if (drawing.length < 3) return alert("Need at least 3 points");
+    const t = zoneTypeSel.value;
+    const z = zoneNameSel.value;
+    zones[t][z] = drawing.slice();
+    drawing = [];
+    drawAll();
+  }
+
+  img.onload = () => {
+    canvas.width = img.width;
+    canvas.height = img.height;
+    drawAll();
+  };
+  img.src = imgUrl;
+
+  canvas.addEventListener("click", (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = Math.round((e.clientX - rect.left) * (canvas.width / rect.width));
+    const y = Math.round((e.clientY - rect.top) * (canvas.height / rect.height));
+    drawing.push([x, y]);
+    drawAll();
+  });
+
+  canvas.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    finishPolygon();
+  });
+
+  document.getElementById("undo").onclick = () => {
+    drawing.pop();
+    drawAll();
+  };
+
+  document.getElementById("finish").onclick = () => {
+    finishPolygon();
+  };
+
+  document.getElementById("clear").onclick = () => {
+    const t = zoneTypeSel.value;
+    const z = zoneNameSel.value;
+    zones[t][z] = [];
+    drawing = [];
+    drawAll();
+  };
+
+  document.getElementById("save").onclick = async () => {
+    try {
+      sanitizeZones();
+      const payload = { entry: {}, exit: {} };
+      for (const k of zoneKeys) {
+        payload.entry[k] = zones.entry[k] || [];
+        payload.exit[k] = zones.exit[k] || [];
+      }
+      const r = await fetch(`/api/zones/${jobId}`, {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(payload)
+      });
+      const data = await r.json();
+      if (!data.ok) return alert("Save failed: " + (data.error || "unknown"));
+      alert("Zones saved");
+    } catch (e) {
+      alert("Save failed: " + e);
+    }
+  };
+</script>
+
+</body>
+</html>

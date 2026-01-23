@@ -1,0 +1,48 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Videos - Traffic Tracker</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="nav">
+    <div class="brand">Traffic Tracker</div>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/upload">Upload</a>
+      <a href="/jobs">Videos</a>
+    </div>
+  </div>
+
+  <div class="container">
+    <span class="tag">Videos</span>
+    <h1>Videos</h1>
+    <p>Review recent videos and jump into results or zone editing.</p>
+
+    {% if not jobs %}
+      <div class="card">No jobs yet. <a href="/upload">Upload a video</a>.</div>
+    {% endif %}
+
+    <div class="grid grid-2" style="margin-top:16px;">
+      {% for j in jobs %}
+        {% set badge_status = "processing" if j.status == "running" else j.status %}
+        <div class="card">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+            <div>
+              <div class="tag">Video</div>
+              <h3><code>{{ j.id }}</code></h3>
+            </div>
+            <span class="badge badge-{{ badge_status }}">{{ badge_status }}</span>
+          </div>
+          <p>Created: {{ j.created_at }}</p>
+          <div style="margin-top:12px;">
+            <a class="btn btn-outline" href="/results/{{ j.id }}">View Results</a>
+            <a class="btn btn-ghost" href="/zones/{{ j.id }}" style="margin-left:8px;">Edit Zones</a>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</body>
+</html>

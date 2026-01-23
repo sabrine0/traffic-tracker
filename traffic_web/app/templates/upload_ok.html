@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Uploaded - Traffic Tracker</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="nav">
+    <div class="brand">Traffic Tracker</div>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/upload">Upload</a>
+      <a href="/jobs">Videos</a>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="card">
+      <span class="tag">Uploaded</span>
+      <h2>Upload Complete</h2>
+      <p>Video: <code>{{ job_id }}</code></p>
+      <p>Saved as: <code>{{ saved_as }}</code></p>
+      <p>File path: <code>{{ file_path }}</code></p>
+      <p>Next step: draw zones, then process.</p>
+
+      <a class="btn btn-primary" href="{{ next_url }}">Go to Results</a>
+    </div>
+  </div>
+</body>
+</html>

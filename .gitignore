@@ -1,15 +1,28 @@
-# Datasets (IMPORTANT)
+# Datasets / training data (do not commit)
 data/
 datasets/
 data/datasets/
+data/**/images/
+data/**/labels/
+datasets/**/images/
+datasets/**/labels/
 
 # YOLO / ML outputs
 runs/
 weights/
+outputs/
 *.pt
 *.onnx
 
+# Web app runtime artifacts
+traffic_web/app/static/uploads/
+traffic_web/app/static/frames/
+traffic_web/app/static/outputs/
+traffic_web/app/static/jobs/
+traffic_web/app/_data/
+
 # Python
 __pycache__/
+.venv/
 venv/
 .env
