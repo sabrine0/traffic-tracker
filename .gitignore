@@ -1,0 +1,15 @@
+# Datasets (IMPORTANT)
+data/
+datasets/
+data/datasets/
+
+# YOLO / ML outputs
+runs/
+weights/
+*.pt
+*.onnx
+
+# Python
+__pycache__/
+venv/
+.env
