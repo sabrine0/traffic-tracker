@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Admin - Traffic Tracker</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+  <div class="nav">
+    <div class="brand">Traffic Tracker Admin</div>
+    <div class="nav-links">
+      {% if user %}
+        <a href="/admin">Dashboard</a>
+        <a href="/map2cad">Map2CAD</a>
+        <a href="/admin/runs">Runs</a>
+        <a href="/admin/profile">Profile</a>
+        {% if user.role == "admin" %}
+          <a href="/admin/users">Users</a>
+          <a href="/admin/zones">Zone Templates</a>
+          <a href="/admin/presets">Config Presets</a>
+        {% else %}
+          <a href="/admin/users/new">Create User</a>
+          <a href="/admin/zones">Zone Templates</a>
+          <a href="/admin/presets">Config Presets</a>
+        {% endif %}
+        <a href="/admin/logout">Logout</a>
+        <a href="/">Main App</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="container">
+    {% block content %}{% endblock %}
+  </div>
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>

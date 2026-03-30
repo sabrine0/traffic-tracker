@@ -95,8 +95,9 @@ def _finalize_video(raw_path: Path, final_path: Path) -> bool:
             final_path.unlink()
         raw_path.replace(final_path)
         return True
-def normalize_zones(zones: dict | None) -> dict:
+def normalize_zones(zones: dict | None, labels: list[str] | None = None) -> dict:
     labels = []
+    fallback_labels = labels if labels else DEFAULT_ZONE_LABELS[:]
     if isinstance(zones, dict):
         for t in ["entry", "exit"]:
             zdict = zones.get(t)
@@ -106,7 +107,7 @@ def normalize_zones(zones: dict | None) -> dict:
                     if name not in labels:
                         labels.append(name)
     if not labels:
-        labels = DEFAULT_ZONE_LABELS[:]
+        labels = fallback_labels[:]
     base = {"entry": {k: [] for k in labels}, "exit": {k: [] for k in labels}}
     if not zones or not isinstance(zones, dict):
         return base
@@ -146,8 +147,9 @@ def check_zone(pt, zones_dict):
         if poly and len(poly) >= 3 and point_in_poly(pt, poly):
             return name
     return None
-def _zone_names(zones, entry_counts, exit_counts, od_counts):
+def _zone_names(zones, entry_counts, exit_counts, od_counts, default_labels=None):
     names = []
+    base_labels = default_labels if default_labels else DEFAULT_ZONE_LABELS[:]
     def add(name):
         if name and name not in names:
             names.append(name)
@@ -170,8 +172,8 @@ def _zone_names(zones, entry_counts, exit_counts, od_counts):
             add(a)
             add(b)
     if not names:
-        names = DEFAULT_ZONE_LABELS[:]
-    ordered = [z for z in DEFAULT_ZONE_LABELS if z in names]
+        names = base_labels[:]
+    ordered = [z for z in base_labels if z in names]
     for z in names:
         if z not in ordered:
             ordered.append(z)
@@ -227,6 +229,8 @@ def process_video(
     min_exit_delay_frames: int = 5,
     class_ids: list[int] | None = None,
     class_names: list[str] | None = None,
+    device: str | None = None,
+    zone_labels: list[str] | None = None,
     progress_cb=None,
 ):
     """
@@ -246,7 +250,8 @@ def process_video(
     heatmap_video_raw_path = job_dir / "heatmap_video_raw.mp4"
     results_path = job_dir / "results.json"
     report_path = job_dir / "report.xlsx"
-    zones = normalize_zones(zones)
+    zone_labels = zone_labels or DEFAULT_ZONE_LABELS[:]
+    zones = normalize_zones(zones, labels=zone_labels)
     if not model_path.exists():
         raise RuntimeError(f"Model not found: {model_path}")
     model = YOLO(str(model_path))
@@ -293,7 +298,9 @@ def process_video(
     base_frame = None
     track_entry = {}
     track_entry_frame = {}
+    track_exit_armed = {}
     track_exit = {}
+    track_exit_frame = {}
     track_counted = set()
     track_first_frame = {}
     track_last_frame = {}
@@ -302,8 +309,22 @@ def process_video(
     entry_counts = defaultdict(int)
     exit_counts = defaultdict(int)
     od_counts = defaultdict(int)
+    detections_total = 0
+    detections_with_id = 0
+    confidence_sum = 0.0
+    confidence_count = 0
     frame_i = 0
     start_time = time.time()
+    track_kwargs = {
+        "persist": True,
+        "tracker": "bytetrack.yaml",
+        "conf": conf,
+        "iou": iou,
+        "verbose": False,
+        "classes": class_ids,
+    }
+    if device:
+        track_kwargs["device"] = device
     while True:
         ok, frame = cap.read()
         if not ok or frame is None:
@@ -313,15 +334,7 @@ def process_video(
             frame = cv2.resize(frame, (out_w, out_h), interpolation=cv2.INTER_AREA)
         if base_frame is None:
             base_frame = frame.copy()
-        res_list = model.track(
-            frame,
-            persist=True,
-            tracker="bytetrack.yaml",
-            conf=conf,
-            iou=iou,
-            verbose=False,
-            classes=class_ids,
-        )
+        res_list = model.track(frame, **track_kwargs)
         res = res_list[0] if res_list else None
         vis = frame.copy()
         for name, poly in entry_zones.items():
@@ -341,6 +354,12 @@ def process_video(
                     cls = b.cls.cpu().numpy().astype(int)
             except Exception:
                 cls = None
+            conf = None
+            try:
+                if b.conf is not None:
+                    conf = b.conf.cpu().numpy().astype(float)
+            except Exception:
+                conf = None
             ids = None
             if b.id is not None:
                 try:
@@ -356,8 +375,13 @@ def process_video(
                 class_name = None
                 if class_id is not None:
                     class_name = str(class_id_to_name.get(class_id, class_id)).lower()
+                detections_total += 1
+                if conf is not None and i < len(conf):
+                    confidence_sum += float(conf[i])
+                    confidence_count += 1
                 tid = int(ids[i]) if ids is not None else -1
                 if tid != -1:
+                    detections_with_id += 1
                     traj[tid].append((cx, cy))
                     if tid not in track_first_frame:
                         track_first_frame[tid] = frame_i
@@ -373,16 +397,23 @@ def process_video(
                 if tid != -1 and entry and tid not in track_entry and _zone_allows_class(entry, class_name):
                     track_entry[tid] = entry
                     track_entry_frame[tid] = frame_i
+                    # Arm exit only after the track leaves all exit zones once.
+                    # This prevents instant false exits when entry/exit zones overlap.
+                    track_exit_armed[tid] = False
                     entry_counts[entry] += 1
+                if tid != -1 and tid in track_entry and tid not in track_exit and not exit_:
+                    track_exit_armed[tid] = True
                 if (
                     tid != -1
                     and tid in track_entry
                     and exit_
                     and tid not in track_exit
+                    and track_exit_armed.get(tid, False)
                     and _zone_allows_class(exit_, class_name)
                     and (frame_i - track_entry_frame.get(tid, 0)) >= min_exit_delay_frames
                 ):
                     track_exit[tid] = exit_
+                    track_exit_frame[tid] = frame_i
                     exit_counts[exit_] += 1
                 if tid != -1 and tid in track_entry and tid in track_exit and tid not in track_counted:
                     od_counts[(track_entry[tid], track_exit[tid])] += 1
@@ -438,9 +469,11 @@ def process_video(
                 "class": track_class.get(tid),
                 "first_frame": track_first_frame.get(tid, 0),
                 "last_frame": track_last_frame.get(tid, 0),
+                "entry_frame": track_entry_frame.get(tid),
+                "exit_frame": track_exit_frame.get(tid),
             }
         )
-    zone_names = _zone_names(zones, entry_counts, exit_counts, od_counts)
+    zone_names = _zone_names(zones, entry_counts, exit_counts, od_counts, zone_labels)
     zone_map = _letter_zone_map(zone_names)
     if zone_map:
         entry_counts = _remap_counts(entry_counts, zone_map)
@@ -466,6 +499,21 @@ def process_video(
         "zone_names": zone_names,
         "classes": class_names or [str(cid) for cid in class_ids],
         "class_counts": dict(class_counts),
+        "quality": {
+            "detections_total": int(detections_total),
+            "detections_with_id": int(detections_with_id),
+            "lost_id_rate": (
+                1.0 - (float(detections_with_id) / float(detections_total))
+                if detections_total
+                else None
+            ),
+            "avg_confidence": (
+                float(confidence_sum) / float(confidence_count)
+                if confidence_count
+                else None
+            ),
+            "confidence_count": int(confidence_count),
+        },
         "files": {
             "overlay_video": overlay_path.name,
             "heatmap_image": heatmap_path.name,
@@ -545,5 +593,20 @@ def process_video(
         "zone_names": zone_names,
         "classes": class_names or [str(cid) for cid in class_ids],
         "class_counts": dict(class_counts),
+        "quality": {
+            "detections_total": int(detections_total),
+            "detections_with_id": int(detections_with_id),
+            "lost_id_rate": (
+                1.0 - (float(detections_with_id) / float(detections_total))
+                if detections_total
+                else None
+            ),
+            "avg_confidence": (
+                float(confidence_sum) / float(confidence_count)
+                if confidence_count
+                else None
+            ),
+            "confidence_count": int(confidence_count),
+        },
     }
     return outputs, metrics

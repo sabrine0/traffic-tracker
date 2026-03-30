@@ -244,6 +244,35 @@ img {
   border: 1px solid var(--line);
 }
 
+.map {
+  width: 100%;
+  height: 320px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  overflow: hidden;
+  background: #eef1ea;
+}
+
+.map-results {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.map-result {
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #fff;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.map-result:hover {
+  border-color: var(--accent);
+}
+
 .progress {
   height: 10px;
   background: #f1ece2;
@@ -305,6 +334,71 @@ pre {
   padding: 14px;
   border-radius: 12px;
   overflow: auto;
+}
+
+.status-chip {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+}
+
+.status-green {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-orange {
+  background: #fde68a;
+  color: #92400e;
+}
+
+.status-red {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.status-muted {
+  background: #f1ece2;
+  color: #6f6a63;
+}
+
+.diagram {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.diagram-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+  background: #fff;
+}
+
+.diagram-title {
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.lane-row {
+  display: grid;
+  gap: 8px;
+}
+
+.lane-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #faf7f2;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 @keyframes rise {

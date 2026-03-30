@@ -1,0 +1,57 @@
+{% extends "admin/base.html" %}
+{% block content %}
+  <h1>{% if is_new %}Create User{% else %}Edit User{% endif %}</h1>
+  {% if error %}
+    <div class="tag" style="background:#ffecec; color:#b00020; border-color:#f5c2c7;">
+      {{ error }}
+    </div>
+  {% endif %}
+  <div class="box">
+    <form method="post">
+      <label style="display:block; font-weight:600; margin-bottom:6px;">Email</label>
+      <input type="email" name="email" required value="{{ form.email or '' }}" style="width:100%; padding:8px; margin-bottom:12px;">
+
+      <label style="display:block; font-weight:600; margin-bottom:6px;">Username</label>
+      <input type="text" name="username" required value="{{ form.username or '' }}" style="width:100%; padding:8px; margin-bottom:12px;">
+
+      <label style="display:block; font-weight:600; margin-bottom:6px;">Full Name</label>
+      <input type="text" name="full_name" value="{{ form.full_name or '' }}" style="width:100%; padding:8px; margin-bottom:12px;">
+
+      <label style="display:block; font-weight:600; margin-bottom:6px;">Role</label>
+      <select name="role" style="width:100%; padding:8px; margin-bottom:12px;">
+        <option value="viewer" {% if (form.role or 'viewer') == 'viewer' %}selected{% endif %}>Viewer</option>
+        <option value="user" {% if form.role == 'user' %}selected{% endif %}>User</option>
+        {% if user.role == 'admin' %}
+          <option value="admin" {% if form.role == 'admin' %}selected{% endif %}>Admin</option>
+        {% endif %}
+      </select>
+
+      {% if is_new %}
+        <label style="display:block; font-weight:600; margin-bottom:6px;">Password</label>
+        <input type="password" name="password" required style="width:100%; padding:8px; margin-bottom:12px;">
+      {% endif %}
+
+      <label style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+        <input type="checkbox" name="is_active" {% if form.is_active %}checked{% endif %}>
+        <span>Active</span>
+      </label>
+
+      <button class="btn btn-primary" type="submit">{% if is_new %}Create{% else %}Save{% endif %}</button>
+      {% if user.role == 'admin' %}
+        <a class="btn btn-outline" href="/admin/users">Cancel</a>
+      {% else %}
+        <a class="btn btn-outline" href="/admin">Cancel</a>
+      {% endif %}
+    </form>
+  </div>
+
+  {% if not is_new %}
+    <div class="box">
+      <h3>Reset Password</h3>
+      <form method="post" action="/admin/users/{{ target.id }}/reset_password">
+        <input type="password" name="new_password" required placeholder="New password" style="width:100%; padding:8px; margin-bottom:12px;">
+        <button class="btn btn-dark" type="submit">Reset Password</button>
+      </form>
+    </div>
+  {% endif %}
+{% endblock %}

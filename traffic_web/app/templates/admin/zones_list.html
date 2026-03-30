@@ -1,0 +1,32 @@
+{% extends "admin/base.html" %}
+{% block content %}
+  <h1>Zone Templates</h1>
+  <div class="box">
+    <a class="btn btn-primary" href="/admin/zones/new">New Template</a>
+  </div>
+  <div class="box">
+    <table>
+      <tr>
+        <th>ID</th>
+        <th>Name</th>
+        <th>Active</th>
+        <th>Created</th>
+        <th>Actions</th>
+      </tr>
+      {% for t in templates %}
+        <tr>
+          <td>{{ t.id }}</td>
+          <td>{{ t.name }}</td>
+          <td>{{ "Yes" if t.is_active else "No" }}</td>
+          <td>{{ t.created_at }}</td>
+          <td style="display:flex; gap:8px; flex-wrap:wrap;">
+            <a href="/admin/zones/{{ t.id }}/edit">Edit</a>
+            <form method="post" action="/admin/zones/{{ t.id }}/delete" style="display:inline;">
+              <button class="btn btn-outline" type="submit">Delete</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+    </table>
+  </div>
+{% endblock %}

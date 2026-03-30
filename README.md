@@ -24,7 +24,7 @@ results review.
 ```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
-pip install fastapi uvicorn[standard] opencv-python ultralytics numpy av python-multipart
+pip install fastapi uvicorn[standard] opencv-python ultralytics numpy av python-multipart alembic flask flask-cors shapely pyproj ezdxf requests
 ```
 
 Model weights are not included. Either place `yolov8n.pt` in the project root or
@@ -41,6 +41,17 @@ python -m uvicorn traffic_web.app:app --host 127.0.0.1 --port 8000
 ```
 
 Open `http://127.0.0.1:8000` in your browser.
+
+## Map2CAD integration
+
+The app now includes a vendored `Map2CAD` module mounted inside the same FastAPI
+server:
+
+- UI: `http://127.0.0.1:8000/map2cad`
+- API: `http://127.0.0.1:8000/map2cad-api`
+
+The frontend bundle is built into `traffic_web/app/static/map2cad/`, and the
+embedded backend stores its exports/cache under `traffic_web/app/_data/map2cad/`.
 
 ## Training (optional)
 

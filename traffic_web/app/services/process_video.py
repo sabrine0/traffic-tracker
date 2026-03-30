@@ -157,6 +157,7 @@ def process_video(
     # Tracking + OD
     track_entry = {}
     track_entry_frame = {}
+    track_exit_armed = {}
     track_exit = {}
     track_counted = set()
 
@@ -241,13 +242,19 @@ def process_video(
                 if tid != -1 and entry and tid not in track_entry:
                     track_entry[tid] = entry
                     track_entry_frame[tid] = total_frames
+                    # Prevent instant self-exits for overlapping entry/exit zones.
+                    track_exit_armed[tid] = False
                     entry_counts[entry] += 1
+
+                if tid != -1 and tid in track_entry and tid not in track_exit and not exit_:
+                    track_exit_armed[tid] = True
 
                 if (
                     tid != -1
                     and tid in track_entry
                     and exit_
                     and tid not in track_exit
+                    and track_exit_armed.get(tid, False)
                     and (total_frames - track_entry_frame.get(tid, 0)) >= min_exit_delay_frames
                 ):
                     track_exit[tid] = exit_

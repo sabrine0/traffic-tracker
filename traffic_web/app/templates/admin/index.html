@@ -1,0 +1,281 @@
+{% extends "admin/base.html" %}
+{% block extra_head %}
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+{% endblock %}
+{% block content %}
+  <h1>Admin Dashboard</h1>
+  <p>Welcome, {{ user.username }}.</p>
+
+  <div class="box">
+    <h3>Totals</h3>
+    <table>
+      <tr><th>Total Runs</th><td>{{ stats.totals.runs_total }}</td></tr>
+      <tr><th>Completed Runs</th><td>{{ stats.totals.runs_done }}</td></tr>
+      <tr><th>Total Vehicles</th><td>{{ stats.totals.total_vehicles }}</td></tr>
+      <tr><th>Total Persons</th><td>{{ stats.totals.total_persons }}</td></tr>
+    </table>
+  </div>
+
+  <div class="grid grid-2" style="margin-top:16px;">
+    <div class="card">
+      <h3>KPIs</h3>
+      <table>
+        <tr><th>Flow / min</th><td>{{ "%.2f"|format(stats.kpis.flow_per_min) }}</td></tr>
+        <tr><th>Flow / hour</th><td>{{ "%.2f"|format(stats.kpis.flow_per_hour) }}</td></tr>
+        <tr>
+          <th>Peak Period</th>
+          <td>
+            {% if stats.kpis.peak_period %}
+              {{ stats.kpis.peak_period.label }} ({{ stats.kpis.peak_period.count }})
+            {% else %}
+              N/A
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <th>Dominant Direction</th>
+          <td>
+            {% if stats.kpis.dominant_direction %}
+              {{ stats.kpis.dominant_direction.pair }} ({{ stats.kpis.dominant_direction.count }},
+              {{ "%.1f"|format(stats.kpis.dominant_direction.share * 100) }}%)
+            {% else %}
+              N/A
+            {% endif %}
+          </td>
+        </tr>
+      </table>
+    </div>
+    <div class="card">
+      <h3>Quality Metrics</h3>
+      <table>
+        <tr>
+          <th>Avg Confidence</th>
+          <td>
+            {% if stats.quality.avg_confidence is not none %}
+              {{ "%.3f"|format(stats.quality.avg_confidence) }}
+            {% else %}
+              N/A
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <th>Lost-ID Rate</th>
+          <td>
+            {% if stats.quality.lost_id_rate is not none %}
+              {{ "%.2f"|format(stats.quality.lost_id_rate * 100) }}%
+            {% else %}
+              N/A
+            {% endif %}
+          </td>
+        </tr>
+        <tr><th>Detections</th><td>{{ stats.quality.detections_total }}</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="grid grid-2" style="margin-top:16px;">
+    <div class="card">
+      <h3>Counts by Class</h3>
+      <table>
+        <tr><th>Class</th><th>Count</th></tr>
+        {% for row in stats.counts.classes %}
+          <tr><td>{{ row.class }}</td><td>{{ row.count }}</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+    <div class="card">
+      <h3>OD Summary</h3>
+      <table>
+        <tr><th>Flow</th><th>Count</th></tr>
+        {% for row in stats.counts.od %}
+          <tr><td>{{ row.flow }}</td><td>{{ row.count }}</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+
+  <div class="grid grid-2" style="margin-top:16px;">
+    <div class="card">
+      <h3>Entry Counts by Zone</h3>
+      <table>
+        <tr><th>Zone</th><th>Count</th></tr>
+        {% for row in stats.counts.entries %}
+          <tr><td>{{ row.zone }}</td><td>{{ row.count }}</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+    <div class="card">
+      <h3>Exit Counts by Zone</h3>
+      <table>
+        <tr><th>Zone</th><th>Count</th></tr>
+        {% for row in stats.counts.exits %}
+          <tr><td>{{ row.zone }}</td><td>{{ row.count }}</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+
+  <div class="box" style="margin-top:16px;">
+    <h3>Tracked Locations</h3>
+    <div id="dashboardMap" class="map"></div>
+    {% if map_runs %}
+      <p>Marker click opens result. Left-click empty map creates a new run at that place.</p>
+    {% else %}
+      <p>Left-click map to start a new run with that location.</p>
+    {% endif %}
+    {% if not google_maps_api_key %}
+      <p style="color:var(--muted);">Google Maps key missing, using OpenStreetMap fallback.</p>
+    {% endif %}
+  </div>
+
+  <div class="box" style="margin-top:16px;">
+    <h3>Recent Runs</h3>
+    <table>
+      <tr>
+        <th>ID</th>
+        <th>Video ID</th>
+        <th>Status</th>
+        <th>Created</th>
+        <th>Actions</th>
+      </tr>
+      {% for run in recent_runs %}
+        <tr>
+          <td>{{ run.id }}</td>
+          <td>{{ run.job_id }}</td>
+          <td>{{ run.status }}</td>
+          <td>{{ run.created_at }}</td>
+          <td><a href="/admin/runs/{{ run.id }}">View</a></td>
+        </tr>
+      {% endfor %}
+    </table>
+  </div>
+{% endblock %}
+{% block extra_scripts %}
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const mapRuns = {{ map_runs | tojson }};
+    const googleMapsApiKey = {{ google_maps_api_key | tojson }};
+
+    function goToUpload(lat, lon, address) {
+      const params = new URLSearchParams();
+      const place = (address && address.trim()) || `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+      params.set("place", place);
+      params.set("address", address || place);
+      params.set("lat", lat.toFixed(6));
+      params.set("lon", lon.toFixed(6));
+      window.location.assign(`/upload?${params.toString()}`);
+    }
+
+    async function reverseGeocode(lat, lon) {
+      try {
+        const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`;
+        const res = await fetch(url, { headers: { "Accept-Language": "en" } });
+        const data = await res.json();
+        return data && data.display_name ? data.display_name : "";
+      } catch (e) {
+        return "";
+      }
+    }
+
+    function initLeafletDashboardMap() {
+      const map = L.map("dashboardMap");
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "&copy; OpenStreetMap contributors"
+      }).addTo(map);
+
+      const bounds = [];
+      let lastMarkerClickAt = 0;
+      for (const run of mapRuns) {
+        const lat = Number(run.lat);
+        const lon = Number(run.lon);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+        const marker = L.marker([lat, lon]).addTo(map);
+        marker.bindTooltip(run.address || run.place || run.title || run.job_id || "Run", { direction: "top" });
+        marker.on("click", () => {
+          lastMarkerClickAt = Date.now();
+          window.location.assign(run.result_url || run.run_url || "/admin");
+        });
+        bounds.push([lat, lon]);
+      }
+
+      if (bounds.length > 1) {
+        map.fitBounds(bounds, { padding: [24, 24] });
+      } else if (bounds.length === 1) {
+        map.setView(bounds[0], 15);
+      } else {
+        map.setView([20, 0], 2);
+      }
+
+      map.on("click", async (ev) => {
+        if (Date.now() - lastMarkerClickAt < 350) return;
+        const lat = ev.latlng.lat;
+        const lon = ev.latlng.lng;
+        const address = await reverseGeocode(lat, lon);
+        goToUpload(lat, lon, address);
+      });
+    }
+
+    window.initDashboardGoogleMap = function initDashboardGoogleMap() {
+      const mapEl = document.getElementById("dashboardMap");
+      const defaultCenter = { lat: 20, lng: 0 };
+      const map = new google.maps.Map(mapEl, {
+        center: defaultCenter,
+        zoom: 2,
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: true,
+      });
+
+      const geocoder = new google.maps.Geocoder();
+      const bounds = new google.maps.LatLngBounds();
+      let markerCount = 0;
+      let lastMarkerClickAt = 0;
+
+      for (const run of mapRuns) {
+        const lat = Number(run.lat);
+        const lng = Number(run.lon);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+        const marker = new google.maps.Marker({
+          map,
+          position: { lat, lng },
+          title: run.address || run.place || run.title || run.job_id || "Run",
+        });
+        marker.addListener("click", () => {
+          lastMarkerClickAt = Date.now();
+          window.location.assign(run.result_url || run.run_url || "/admin");
+        });
+        bounds.extend(marker.getPosition());
+        markerCount += 1;
+      }
+
+      if (markerCount > 1) {
+        map.fitBounds(bounds, 40);
+      } else if (markerCount === 1) {
+        map.setCenter(bounds.getCenter());
+        map.setZoom(15);
+      }
+
+      map.addListener("click", (ev) => {
+        if (Date.now() - lastMarkerClickAt < 350) return;
+        const lat = ev.latLng.lat();
+        const lon = ev.latLng.lng();
+        geocoder.geocode({ location: ev.latLng }, (results, status) => {
+          const address = status === "OK" && results && results[0] ? results[0].formatted_address : "";
+          goToUpload(lat, lon, address);
+        });
+      });
+    };
+
+    if (googleMapsApiKey) {
+      const script = document.createElement("script");
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(googleMapsApiKey)}&callback=initDashboardGoogleMap`;
+      script.async = true;
+      script.defer = true;
+      script.onerror = () => initLeafletDashboardMap();
+      document.head.appendChild(script);
+    } else {
+      initLeafletDashboardMap();
+    }
+  </script>
+{% endblock %}

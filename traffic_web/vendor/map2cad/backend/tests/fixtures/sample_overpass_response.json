@@ -1,0 +1,39 @@
+{
+  "version": 0.6,
+  "elements": [
+    {"type": "node", "id": 1001, "lat": 40.7500, "lon": -73.9900},
+    {"type": "node", "id": 1002, "lat": 40.7510, "lon": -73.9900},
+    {"type": "node", "id": 1003, "lat": 40.7520, "lon": -73.9900},
+    {"type": "node", "id": 2001, "lat": 40.7505, "lon": -73.9910},
+    {"type": "node", "id": 2002, "lat": 40.7505, "lon": -73.9890},
+    {
+      "type": "way",
+      "id": 100,
+      "nodes": [1001, 1002, 1003],
+      "tags": {
+        "highway": "residential",
+        "name": "Test Street",
+        "lanes": "2"
+      }
+    },
+    {
+      "type": "way",
+      "id": 101,
+      "nodes": [2001, 2002],
+      "tags": {
+        "highway": "primary",
+        "name": "Main Avenue",
+        "lanes": "4",
+        "sidewalk": "both"
+      }
+    },
+    {
+      "type": "way",
+      "id": 102,
+      "nodes": [1001, 2001],
+      "tags": {
+        "highway": "service"
+      }
+    }
+  ]
+}

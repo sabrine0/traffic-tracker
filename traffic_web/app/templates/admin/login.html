@@ -1,0 +1,21 @@
+{% extends "admin/base.html" %}
+{% block content %}
+  <div class="box" style="max-width:420px; margin:32px auto;">
+    <h1>Admin Login</h1>
+    {% if error %}
+      <div class="tag" style="background:#ffecec; color:#b00020; border-color:#f5c2c7;">
+        {{ error }}
+      </div>
+    {% endif %}
+    <form method="post" style="margin-top:16px;">
+      {% if next %}
+        <input type="hidden" name="next" value="{{ next }}">
+      {% endif %}
+      <label style="display:block; font-weight:600; margin-bottom:6px;">Username or Email</label>
+      <input type="text" name="username" required style="width:100%; padding:8px; margin-bottom:12px;">
+      <label style="display:block; font-weight:600; margin-bottom:6px;">Password</label>
+      <input type="password" name="password" required style="width:100%; padding:8px; margin-bottom:16px;">
+      <button class="btn btn-primary" type="submit">Login</button>
+    </form>
+  </div>
+{% endblock %}

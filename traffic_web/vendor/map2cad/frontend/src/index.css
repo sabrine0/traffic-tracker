@@ -1,0 +1,165 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #2563eb;
+  --color-primary-dark: #1d4ed8;
+  --color-secondary: #64748b;
+  --color-accent: #f59e0b;
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-sans);
+}
+
+body {
+  background-color: #f8fafc;
+  color: #1e293b;
+}
+
+/* Map container styling */
+.map-container {
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+/* Leaflet control overrides */
+.leaflet-control-zoom {
+  border: none !important;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.2) !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+}
+
+.leaflet-control-zoom a {
+  background-color: #fff !important;
+  color: #374151 !important;
+  width: 32px !important;
+  height: 32px !important;
+  line-height: 32px !important;
+  font: bold 18px "Lucida Console", Monaco, monospace !important;
+  text-indent: 1px !important;
+  border-bottom: 1px solid #e5e7eb !important;
+  transition: background-color 0.15s ease;
+}
+
+.leaflet-control-zoom a:hover {
+  background-color: #f3f4f6 !important;
+  color: #111827 !important;
+}
+
+.leaflet-control-zoom a:last-child {
+  border-bottom: none !important;
+}
+
+.leaflet-control-layers {
+  border: none !important;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.2) !important;
+  border-radius: 8px !important;
+}
+
+.leaflet-control-layers-toggle {
+  width: 32px !important;
+  height: 32px !important;
+  background-size: 18px 18px !important;
+  background-position: center !important;
+}
+
+.leaflet-control-layers-expanded {
+  padding: 8px 12px !important;
+  font-size: 13px !important;
+}
+
+.leaflet-control-scale-line {
+  border-color: #6b7280 !important;
+  color: #374151 !important;
+  font-size: 11px !important;
+  background: rgba(255, 255, 255, 0.7) !important;
+  border-radius: 3px;
+  padding: 1px 6px !important;
+}
+
+/* Draw tools styling */
+.leaflet-draw-toolbar a {
+  background-size: 300px 30px !important;
+  width: 32px !important;
+  height: 32px !important;
+  line-height: 32px !important;
+}
+
+.leaflet-draw-section {
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.2) !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+}
+
+/* Edit handles — more visible vertices */
+.leaflet-editing-icon {
+  border-radius: 50% !important;
+  border: 2px solid #2563eb !important;
+  background: #fff !important;
+  width: 10px !important;
+  height: 10px !important;
+  margin-left: -5px !important;
+  margin-top: -5px !important;
+  box-shadow: 0 0 4px rgba(37, 99, 235, 0.4);
+  cursor: grab !important;
+}
+
+.leaflet-editing-icon:hover {
+  background: #2563eb !important;
+  transform: scale(1.3);
+}
+
+/* Attribution styling */
+.leaflet-control-attribution {
+  font-size: 10px !important;
+  background: rgba(255, 255, 255, 0.7) !important;
+  padding: 2px 6px !important;
+  border-radius: 3px 0 0 0;
+}
+
+.leaflet-control-attribution a {
+  color: #4b5563 !important;
+}
+
+/* Smooth map transitions */
+.leaflet-fade-anim .leaflet-tile,
+.leaflet-fade-anim .leaflet-popup {
+  transition: opacity 0.2s linear;
+}
+
+.leaflet-zoom-anim .leaflet-zoom-animated {
+  transition: transform 0.25s cubic-bezier(0, 0, 0.25, 1);
+}
+
+/* Progress bar animation */
+@keyframes progress-indeterminate {
+  0% { width: 10%; margin-left: 0; }
+  50% { width: 60%; margin-left: 20%; }
+  100% { width: 10%; margin-left: 90%; }
+}
+
+/* Focus visible indicators */
+button:focus-visible,
+a:focus-visible,
+[role="switch"]:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Skip to content (screen reader) */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}

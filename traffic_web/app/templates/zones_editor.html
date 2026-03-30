@@ -9,9 +9,17 @@
   <div class="nav">
     <div class="brand">Traffic Tracker</div>
     <div class="nav-links">
-      <a href="/">Home</a>
-      <a href="/upload">Upload</a>
-      <a href="/jobs">Videos</a>
+      {% if user %}
+        <a href="/">Home</a>
+        <a href="/admin">Dashboard</a>
+        {% if user.role != 'viewer' %}
+          <a href="/upload">New Run</a>
+          <a href="/upload">Upload</a>
+        {% endif %}
+        <a href="/jobs">Videos</a>
+      {% else %}
+        <a href="/admin/login">Login</a>
+      {% endif %}
     </div>
   </div>
 
@@ -44,6 +52,40 @@
 
         <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
           <button class="btn btn-outline" id="addZone">Add Zone</button>
+          <button class="btn btn-ghost" id="autoVP">Auto V/P</button>
+        </div>
+        <p style="font-size:12px; color:var(--muted); margin-top:6px;">
+          Auto V/P creates road-centered starter gates (V1-V4, P1-P4). Review and adjust as needed.
+        </p>
+
+        <div style="margin-top:10px;">
+          <label><b>Auto Labels</b></label>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:6px;">
+            <input id="vCount" type="number" min="1" max="50" value="13" style="width:72px;">
+            <span>V zones</span>
+            <input id="pCount" type="number" min="0" max="50" value="13" style="width:72px;">
+            <span>P zones</span>
+            <button class="btn btn-ghost" id="applyLabels">Apply</button>
+          </div>
+          <p style="font-size:12px; color:var(--muted); margin-top:6px;">
+            Creates V1..Vn and P1..Pn labels for Entry and Exit.
+          </p>
+        </div>
+
+        <div style="margin-top:12px;">
+          <label><b>Auto Road Zone</b></label>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:6px;">
+            <button class="btn btn-outline" id="autoRoadToggle">Auto Road: Off</button>
+            <input id="roadWidth" type="number" min="6" max="300" value="40" style="width:80px;">
+            <span>px width</span>
+            <label style="display:flex; gap:6px; align-items:center;">
+              <input id="autoAdvance" type="checkbox" checked>
+              <span>Next Zone</span>
+            </label>
+          </div>
+          <p style="font-size:12px; color:var(--muted); margin-top:6px;">
+            Turn on, then click 2 points along the road to create a rectangle.
+          </p>
         </div>
 
         <p id="activeZone" style="margin-top:12px;">Active: entry V1</p>
@@ -78,11 +120,21 @@
   const zoneNameSel = document.getElementById("zoneName");
   const addZoneBtn = document.getElementById("addZone");
   const activeZone = document.getElementById("activeZone");
+  const vCountInput = document.getElementById("vCount");
+  const pCountInput = document.getElementById("pCount");
+  const applyLabelsBtn = document.getElementById("applyLabels");
+  const autoRoadToggle = document.getElementById("autoRoadToggle");
+  const roadWidthInput = document.getElementById("roadWidth");
+  const autoAdvanceInput = document.getElementById("autoAdvance");
 
   let zones = initialZones || {};
   let drawing = [];
   let img = new Image();
   let zoneKeys = [];
+  let frameReady = false;
+  let frameError = false;
+  let autoRoadMode = false;
+  let roadPoints = [];
 
   function isZoneLabel(name) {
     return /^[VP]\d+$/i.test(String(name));
@@ -155,6 +207,65 @@
     activeZone.textContent = `Active: ${t} ${z}`;
   }
 
+  function maxIndexFor(prefix) {
+    let max = 0;
+    const re = new RegExp(`^${prefix}(\\d+)$`, "i");
+    for (const k of zoneLabels) {
+      const m = re.exec(String(k));
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (n > max) max = n;
+      }
+    }
+    return max;
+  }
+
+  function buildLabels(vCount, pCount) {
+    const labels = [];
+    const vMax = Math.max(1, Math.min(50, vCount || 0));
+    const pMax = Math.max(0, Math.min(50, pCount || 0));
+    for (let i = 1; i <= vMax; i++) labels.push(`V${i}`);
+    for (let i = 1; i <= pMax; i++) labels.push(`P${i}`);
+    return labels;
+  }
+
+  function hasDataOutside(keepLabels) {
+    const keep = new Set(keepLabels);
+    for (const t of ["entry", "exit"]) {
+      const zdict = zones[t] || {};
+      for (const k of Object.keys(zdict)) {
+        if (keep.has(k)) continue;
+        const poly = zdict[k];
+        if (Array.isArray(poly) && poly.length) return true;
+      }
+    }
+    return false;
+  }
+
+  function applyLabelCounts(vCount, pCount) {
+    const nextLabels = buildLabels(vCount, pCount);
+    if (hasDataOutside(nextLabels)) {
+      const ok = confirm("This will remove zones not in the new list. Continue?");
+      if (!ok) return;
+    }
+    zoneLabels.length = 0;
+    zoneLabels.push(...nextLabels);
+    zones.entry ||= {};
+    zones.exit ||= {};
+    for (const t of ["entry", "exit"]) {
+      for (const k of Object.keys(zones[t])) {
+        if (!nextLabels.includes(k)) delete zones[t][k];
+      }
+    }
+    for (const k of nextLabels) {
+      zones.entry[k] ||= [];
+      zones.exit[k] ||= [];
+    }
+    refreshZoneOptions();
+    updateActiveLabel();
+    drawAll();
+  }
+
   function getNextZoneName() {
     const current = zoneNameSel.value || "V1";
     const match = /^([A-Za-z])(\d+)$/.exec(String(current));
@@ -187,12 +298,75 @@
   ensureKeys();
   refreshZoneOptions();
   updateActiveLabel();
+  if (vCountInput) vCountInput.value = String(maxIndexFor("V") || 13);
+  if (pCountInput) pCountInput.value = String(maxIndexFor("P") || 13);
 
   zoneTypeSel.addEventListener("change", updateActiveLabel);
   zoneNameSel.addEventListener("change", updateActiveLabel);
   if (addZoneBtn) {
     addZoneBtn.addEventListener("click", () => {
       addZone(getNextZoneName());
+    });
+  }
+  if (applyLabelsBtn) {
+    applyLabelsBtn.addEventListener("click", () => {
+      const vCount = parseInt(vCountInput ? vCountInput.value : "13", 10);
+      const pCount = parseInt(pCountInput ? pCountInput.value : "13", 10);
+      applyLabelCounts(vCount, pCount);
+    });
+  }
+  const autoVPBtn = document.getElementById("autoVP");
+  if (autoVPBtn) {
+    autoVPBtn.addEventListener("click", async () => {
+      const ok = await ensureFrameReady();
+      if (!ok) {
+        alert("Frame not loaded. Please refresh and check access.");
+        return;
+      }
+      syncCanvasToImage();
+      if (!canvas.width || !canvas.height) {
+        alert("Frame not loaded. Please refresh and check access.");
+        return;
+      }
+      const w = canvas.width;
+      const h = canvas.height;
+
+      function rectPoly(x1, y1, x2, y2) {
+        const xa = Math.max(0, Math.min(w - 1, Math.round(Math.min(x1, x2))));
+        const xb = Math.max(0, Math.min(w - 1, Math.round(Math.max(x1, x2))));
+        const ya = Math.max(0, Math.min(h - 1, Math.round(Math.min(y1, y2))));
+        const yb = Math.max(0, Math.min(h - 1, Math.round(Math.max(y1, y2))));
+        if (xb - xa < 2 || yb - ya < 2) return [];
+        return [[xa, ya], [xb, ya], [xb, yb], [xa, yb]];
+      }
+
+      const vBand = Math.max(12, Math.round(Math.min(w, h) * 0.06));
+      const pBox = Math.max(10, Math.round(Math.min(w, h) * 0.05));
+      const cx1 = Math.round(w * 0.22);
+      const cx2 = Math.round(w * 0.78);
+      const cy1 = Math.round(h * 0.22);
+      const cy2 = Math.round(h * 0.78);
+
+      const preset = {
+        V1: rectPoly(cx1, 0, cx2, vBand),             // North gate
+        V2: rectPoly(w - 1 - vBand, cy1, w - 1, cy2), // East gate
+        V3: rectPoly(cx1, h - 1 - vBand, cx2, h - 1), // South gate
+        V4: rectPoly(0, cy1, vBand, cy2),             // West gate
+        P1: rectPoly(cx1 - pBox, cy1 - pBox, cx1, cy1), // NW corner near junction
+        P2: rectPoly(cx2, cy1 - pBox, cx2 + pBox, cy1), // NE corner near junction
+        P3: rectPoly(cx2, cy2, cx2 + pBox, cy2 + pBox), // SE corner near junction
+        P4: rectPoly(cx1 - pBox, cy2, cx1, cy2 + pBox), // SW corner near junction
+      };
+
+      for (const name of Object.keys(preset)) {
+        addZone(name);
+        zones.entry[name] = preset[name];
+        zones.exit[name] = preset[name];
+      }
+
+      refreshZoneOptions();
+      updateActiveLabel();
+      drawAll();
     });
   }
 
@@ -209,7 +383,15 @@
 
   function drawAll() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(img, 0, 0);
+    if (frameReady) {
+      ctx.drawImage(img, 0, 0);
+    } else {
+      ctx.fillStyle = "#f6f2ea";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#9a8f7a";
+      ctx.font = "14px serif";
+      ctx.fillText("Frame not loaded", 12, 22);
+    }
 
     for (const k of zoneKeys) drawPoly(zones.entry[k], "rgba(0,0,255,0.9)");
     for (const k of zoneKeys) drawPoly(zones.exit[k], "rgba(255,0,0,0.9)");
@@ -229,6 +411,23 @@
         ctx.fill();
       }
     }
+
+    if (autoRoadMode && roadPoints.length >= 1) {
+      ctx.strokeStyle = "rgba(0,120,0,0.9)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(roadPoints[0][0], roadPoints[0][1]);
+      if (roadPoints.length === 2) {
+        ctx.lineTo(roadPoints[1][0], roadPoints[1][1]);
+      }
+      ctx.stroke();
+      for (const p of roadPoints) {
+        ctx.fillStyle = "rgba(0,120,0,0.9)";
+        ctx.beginPath();
+        ctx.arc(p[0], p[1], 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
   }
 
   function finishPolygon() {
@@ -240,23 +439,98 @@
     drawAll();
   }
 
-  img.onload = () => {
-    canvas.width = img.width;
-    canvas.height = img.height;
+  function buildRoadRect(p1, p2, widthPx) {
+    const dx = p2[0] - p1[0];
+    const dy = p2[1] - p1[1];
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (!len || len < 1) return [];
+    const ux = dx / len;
+    const uy = dy / len;
+    const px = -uy;
+    const py = ux;
+    const hw = Math.max(3, widthPx / 2);
+    const a = [Math.round(p1[0] + px * hw), Math.round(p1[1] + py * hw)];
+    const b = [Math.round(p2[0] + px * hw), Math.round(p2[1] + py * hw)];
+    const c = [Math.round(p2[0] - px * hw), Math.round(p2[1] - py * hw)];
+    const d = [Math.round(p1[0] - px * hw), Math.round(p1[1] - py * hw)];
+    return [a, b, c, d];
+  }
+
+  function syncCanvasToImage() {
+    const w = img.naturalWidth || img.width || 0;
+    const h = img.naturalHeight || img.height || 0;
+    if (w > 0 && h > 0) {
+      canvas.width = w;
+      canvas.height = h;
+    }
+  }
+
+  function ensureFrameReady() {
+    if (frameReady) return Promise.resolve(true);
+    if (frameError) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      const onLoad = () => resolve(true);
+      const onError = () => resolve(false);
+      img.addEventListener("load", onLoad, { once: true });
+      img.addEventListener("error", onError, { once: true });
+    });
+  }
+
+  img.addEventListener("load", () => {
+    frameReady = true;
+    frameError = false;
+    syncCanvasToImage();
+    if (roadWidthInput && !roadWidthInput.dataset.userSet) {
+      const base = Math.round(Math.min(canvas.width || 1, canvas.height || 1) * 0.03);
+      roadWidthInput.value = String(Math.max(10, base));
+    }
     drawAll();
-  };
+  });
+  img.addEventListener("error", () => {
+    frameReady = false;
+    frameError = true;
+    console.error("Failed to load frame:", imgUrl);
+    drawAll();
+  });
   img.src = imgUrl;
 
   canvas.addEventListener("click", (e) => {
     const rect = canvas.getBoundingClientRect();
     const x = Math.round((e.clientX - rect.left) * (canvas.width / rect.width));
     const y = Math.round((e.clientY - rect.top) * (canvas.height / rect.height));
+    if (autoRoadMode) {
+      roadPoints.push([x, y]);
+      if (roadPoints.length === 2) {
+        const widthPx = parseInt(roadWidthInput ? roadWidthInput.value : "40", 10) || 40;
+        const poly = buildRoadRect(roadPoints[0], roadPoints[1], widthPx);
+        if (poly.length) {
+          const t = zoneTypeSel.value;
+          const z = zoneNameSel.value;
+          addZone(z);
+          zones[t][z] = poly;
+          roadPoints = [];
+          drawAll();
+          if (autoAdvanceInput && autoAdvanceInput.checked) {
+            addZone(getNextZoneName());
+          }
+          return;
+        }
+        roadPoints = [];
+      }
+      drawAll();
+      return;
+    }
     drawing.push([x, y]);
     drawAll();
   });
 
   canvas.addEventListener("contextmenu", (e) => {
     e.preventDefault();
+    if (autoRoadMode) {
+      roadPoints = [];
+      drawAll();
+      return;
+    }
     finishPolygon();
   });
 
@@ -274,6 +548,7 @@
     const z = zoneNameSel.value;
     zones[t][z] = [];
     drawing = [];
+    roadPoints = [];
     drawAll();
   };
 
@@ -297,6 +572,22 @@
       alert("Save failed: " + e);
     }
   };
+
+  if (roadWidthInput) {
+    roadWidthInput.addEventListener("change", () => {
+      roadWidthInput.dataset.userSet = "1";
+    });
+  }
+  if (autoRoadToggle) {
+    autoRoadToggle.addEventListener("click", () => {
+      autoRoadMode = !autoRoadMode;
+      roadPoints = [];
+      autoRoadToggle.textContent = autoRoadMode ? "Auto Road: On" : "Auto Road: Off";
+      autoRoadToggle.classList.toggle("btn-dark", autoRoadMode);
+      autoRoadToggle.classList.toggle("btn-outline", !autoRoadMode);
+      drawAll();
+    });
+  }
 </script>
 
 </body>

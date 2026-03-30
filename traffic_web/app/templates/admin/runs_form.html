@@ -1,0 +1,81 @@
+{% extends "admin/base.html" %}
+{% block content %}
+  <h1>{% if is_new %}Create Run{% else %}Edit Run{% endif %}</h1>
+  {% if error %}
+    <div class="tag" style="background:#ffecec; color:#b00020; border-color:#f5c2c7;">
+      {{ error }}
+    </div>
+  {% endif %}
+  <div class="box">
+    <form method="post">
+      <label style="display:block; font-weight:600; margin-bottom:6px;">Video ID</label>
+      <input type="text" name="job_id" required value="{{ form.job_id or '' }}" {% if not is_new %}readonly{% endif %} style="width:100%; padding:8px; margin-bottom:12px;">
+      {% if not is_new %}
+        <div class="tag" style="margin-bottom:12px;">Video ID is immutable.</div>
+      {% endif %}
+
+      <label style="display:block; font-weight:600; margin-bottom:6px;">Title</label>
+      <input type="text" name="title" required value="{{ form.title or '' }}" style="width:100%; padding:8px; margin-bottom:12px;">
+
+      <label style="display:block; font-weight:600; margin-bottom:6px;">Place</label>
+      <input type="text" name="place" required value="{{ form.place or '' }}" style="width:100%; padding:8px; margin-bottom:12px;">
+
+      <label style="display:block; font-weight:600; margin-bottom:6px;">Recorded At (ISO)</label>
+      <input type="text" name="recorded_at" value="{{ form.recorded_at or '' }}" placeholder="YYYY-MM-DD HH:MM:SS" style="width:100%; padding:8px; margin-bottom:12px;">
+
+      <label style="display:block; font-weight:600; margin-bottom:6px;">Status</label>
+      <select name="status" style="width:100%; padding:8px; margin-bottom:12px;">
+        {% for opt in status_options %}
+          <option value="{{ opt }}" {% if (form.status or 'uploaded') == opt %}selected{% endif %}>{{ opt }}</option>
+        {% endfor %}
+      </select>
+
+      <label style="display:block; font-weight:600; margin-bottom:6px;">Owner User</label>
+      <select name="owner_user_id" style="width:100%; padding:8px; margin-bottom:12px;">
+        <option value="">(none)</option>
+        {% for u in users %}
+          <option value="{{ u.id }}" {% if form.owner_user_id|int == u.id %}selected{% endif %}>
+            {{ u.username }} ({{ u.email }})
+          </option>
+        {% endfor %}
+      </select>
+
+      <label style="display:block; font-weight:600; margin-bottom:6px;">Video Filename</label>
+      <input type="text" name="video_filename" value="{{ form.video_filename or '' }}" style="width:100%; padding:8px; margin-bottom:12px;">
+
+      <div class="grid grid-2">
+        <div>
+          <label style="display:block; font-weight:600; margin-bottom:6px;">Project ID</label>
+          <input type="text" name="project_id" value="{{ form.project_id or '' }}" style="width:100%; padding:8px; margin-bottom:12px;">
+        </div>
+        <div>
+          <label style="display:block; font-weight:600; margin-bottom:6px;">Camera ID</label>
+          <input type="text" name="camera_id" value="{{ form.camera_id or '' }}" style="width:100%; padding:8px; margin-bottom:12px;">
+        </div>
+      </div>
+
+      <div class="grid grid-2">
+        <div>
+          <label style="display:block; font-weight:600; margin-bottom:6px;">Started At (ISO)</label>
+          <input type="text" name="started_at" value="{{ form.started_at or '' }}" placeholder="YYYY-MM-DD HH:MM:SS" style="width:100%; padding:8px; margin-bottom:12px;">
+        </div>
+        <div>
+          <label style="display:block; font-weight:600; margin-bottom:6px;">Finished At (ISO)</label>
+          <input type="text" name="finished_at" value="{{ form.finished_at or '' }}" placeholder="YYYY-MM-DD HH:MM:SS" style="width:100%; padding:8px; margin-bottom:12px;">
+        </div>
+      </div>
+
+      <label style="display:block; font-weight:600; margin-bottom:6px;">Metrics JSON</label>
+      <textarea name="metrics_json" rows="6" style="width:100%; padding:8px; margin-bottom:12px;">{{ form.metrics_json or '{}' }}</textarea>
+
+      <label style="display:block; font-weight:600; margin-bottom:6px;">Outputs JSON</label>
+      <textarea name="outputs_json" rows="6" style="width:100%; padding:8px; margin-bottom:12px;">{{ form.outputs_json or '{}' }}</textarea>
+
+      <label style="display:block; font-weight:600; margin-bottom:6px;">Config JSON</label>
+      <textarea name="config_json" rows="6" style="width:100%; padding:8px; margin-bottom:12px;">{{ form.config_json or '{}' }}</textarea>
+
+      <button class="btn btn-primary" type="submit">{% if is_new %}Create{% else %}Save{% endif %}</button>
+      <a class="btn btn-outline" href="/admin/runs">Cancel</a>
+    </form>
+  </div>
+{% endblock %}

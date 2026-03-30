@@ -1,0 +1,26 @@
+{% extends "admin/base.html" %}
+{% block content %}
+  <h1>{% if is_new %}Create Config Preset{% else %}Edit Config Preset{% endif %}</h1>
+  {% if error %}
+    <div class="tag" style="background:#ffecec; color:#b00020; border-color:#f5c2c7;">
+      {{ error }}
+    </div>
+  {% endif %}
+  <div class="box">
+    <form method="post">
+      <label style="display:block; font-weight:600; margin-bottom:6px;">Name</label>
+      <input type="text" name="name" required value="{{ form.name or '' }}" style="width:100%; padding:8px; margin-bottom:12px;">
+
+      <label style="display:block; font-weight:600; margin-bottom:6px;">Config JSON</label>
+      <textarea name="config_json" rows="10" style="width:100%; padding:8px; margin-bottom:12px;">{{ form.config_json }}</textarea>
+
+      <label style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+        <input type="checkbox" name="is_active" {% if form.is_active %}checked{% endif %}>
+        <span>Active</span>
+      </label>
+
+      <button class="btn btn-primary" type="submit">{% if is_new %}Create{% else %}Save{% endif %}</button>
+      <a class="btn btn-outline" href="/admin/presets">Cancel</a>
+    </form>
+  </div>
+{% endblock %}

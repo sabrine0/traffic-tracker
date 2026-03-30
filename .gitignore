@@ -26,3 +26,6 @@ __pycache__/
 .venv/
 venv/
 .env
+
+# Vendored frontend build tooling
+traffic_web/vendor/map2cad/frontend/node_modules/

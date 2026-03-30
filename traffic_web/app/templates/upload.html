@@ -1,27 +1,75 @@
 <!doctype html>
 <html>
-<head>
-  <meta charset="utf-8" />
-  <title>Upload</title>
-  <link rel="stylesheet" href="/static/styles.css" />
-</head>
+  <head>
+    <meta charset="utf-8" />
+    <title>Upload</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  </head>
 <body>
   <div class="nav">
     <div class="brand">Traffic Tracker</div>
     <div class="nav-links">
-      <a href="/">Home</a>
-      <a href="/upload">Upload</a>
-      <a href="/jobs">Videos</a>
+      {% if user %}
+        <a href="/">Home</a>
+        <a href="/admin">Dashboard</a>
+        {% if user.role != 'viewer' %}
+          <a href="/upload">New Run</a>
+          <a href="/upload">Upload</a>
+        {% endif %}
+        <a href="/jobs">Videos</a>
+      {% else %}
+        <a href="/admin/login">Login</a>
+      {% endif %}
     </div>
   </div>
 
   <div class="container">
     <span class="tag">Step 1</span>
     <h1>Upload Video</h1>
-    <p>Choose a video file to start a new job.</p>
+    <p>Choose a video file to start a new video.</p>
+    {% if error %}
+      <div class="tag" style="background:#ffecec; color:#b00020; border-color:#f5c2c7;">
+        {{ error }}
+      </div>
+    {% endif %}
 
     <div class="card">
       <form action="/upload" method="post" enctype="multipart/form-data">
+        <label for="title"><b>Title</b></label>
+        <input type="text" id="title" name="title" value="{{ form.title or '' }}" style="width:100%; margin-bottom:12px;">
+
+        <label for="place"><b>Place</b></label>
+        <input type="text" id="place" name="place" value="{{ form.place or '' }}" required style="width:100%; margin-bottom:12px;">
+
+        <div class="box" style="margin:12px 0;">
+          <h3>Location (Map Search)</h3>
+          <p>Search and drop a pin to save coordinates. Powered by OpenStreetMap.</p>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+            <input id="mapSearch" type="text" placeholder="Search address or place name" style="flex:1; min-width:220px;">
+            <button class="btn btn-outline" type="button" id="mapSearchBtn">Search</button>
+            <button class="btn btn-ghost" type="button" id="useMyLocation">Use My Location</button>
+          </div>
+          <div id="mapResults" class="map-results"></div>
+          <div id="map" class="map"></div>
+          <div style="margin-top:8px; font-size:12px; color:var(--muted);" id="mapStatus"></div>
+        </div>
+
+        <div class="grid grid-2" style="margin-bottom:12px;">
+          <div>
+            <label for="date"><b>Date</b></label>
+            <input type="date" id="date" name="date" value="{{ form.date or '' }}" style="width:100%;">
+          </div>
+          <div>
+            <label for="time"><b>Time</b></label>
+            <input type="time" id="time" name="time" value="{{ form.time or '' }}" style="width:100%;">
+          </div>
+        </div>
+
+        <input type="hidden" id="lat" name="lat" value="{{ form.lat or '' }}">
+        <input type="hidden" id="lon" name="lon" value="{{ form.lon or '' }}">
+        <input type="hidden" id="address" name="address" value="{{ form.address or '' }}">
+
         <label for="file"><b>Video File</b></label>
         <input type="file" id="file" name="file" accept="video/*" required />
         <div style="margin-top:16px;">
@@ -30,5 +78,149 @@
       </form>
     </div>
   </div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const mapEl = document.getElementById("map");
+    const mapResults = document.getElementById("mapResults");
+    const mapStatus = document.getElementById("mapStatus");
+    const mapSearch = document.getElementById("mapSearch");
+    const mapSearchBtn = document.getElementById("mapSearchBtn");
+    const useMyLocationBtn = document.getElementById("useMyLocation");
+    const placeInput = document.getElementById("place");
+    const latInput = document.getElementById("lat");
+    const lonInput = document.getElementById("lon");
+    const addressInput = document.getElementById("address");
+
+    let map;
+    let marker;
+
+    function setLocation(lat, lon, label) {
+      latInput.value = lat.toFixed(6);
+      lonInput.value = lon.toFixed(6);
+      if (label) {
+        addressInput.value = label;
+        if (!placeInput.value) placeInput.value = label;
+      }
+      if (!marker) {
+        marker = L.marker([lat, lon]).addTo(map);
+      } else {
+        marker.setLatLng([lat, lon]);
+      }
+      map.setView([lat, lon], 17);
+    }
+
+    function setStatus(text) {
+      mapStatus.textContent = text || "";
+    }
+
+    function renderResults(items) {
+      mapResults.innerHTML = "";
+      if (!items.length) {
+        mapResults.textContent = "No results.";
+        return;
+      }
+      for (const item of items) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "map-result";
+        btn.textContent = item.display_name;
+        btn.addEventListener("click", () => {
+          const lat = parseFloat(item.lat);
+          const lon = parseFloat(item.lon);
+          if (Number.isFinite(lat) && Number.isFinite(lon)) {
+            setLocation(lat, lon, item.display_name);
+          }
+        });
+        mapResults.appendChild(btn);
+      }
+    }
+
+    async function searchLocation() {
+      const q = mapSearch.value.trim();
+      if (!q) return;
+      setStatus("Searching...");
+      try {
+        const url = `https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(q)}`;
+        const res = await fetch(url, { headers: { "Accept-Language": "en" } });
+        const data = await res.json();
+        renderResults(Array.isArray(data) ? data : []);
+        setStatus("");
+      } catch (e) {
+        setStatus("Search failed. Check internet access.");
+      }
+    }
+
+    async function reverseGeocode(lat, lon) {
+      try {
+        const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`;
+        const res = await fetch(url, { headers: { "Accept-Language": "en" } });
+        const data = await res.json();
+        return data && data.display_name ? data.display_name : "";
+      } catch (e) {
+        return "";
+      }
+    }
+
+    function initMap() {
+      map = L.map(mapEl).setView([0, 0], 2);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "&copy; OpenStreetMap contributors"
+      }).addTo(map);
+
+      map.on("click", async (e) => {
+        const lat = e.latlng.lat;
+        const lon = e.latlng.lng;
+        setLocation(lat, lon, "");
+        const label = await reverseGeocode(lat, lon);
+        if (label) {
+          addressInput.value = label;
+          if (!placeInput.value) placeInput.value = label;
+        }
+      });
+
+      if (latInput.value && lonInput.value) {
+        const lat = parseFloat(latInput.value);
+        const lon = parseFloat(lonInput.value);
+        if (Number.isFinite(lat) && Number.isFinite(lon)) {
+          setLocation(lat, lon, addressInput.value || "");
+        }
+      }
+    }
+
+    mapSearchBtn.addEventListener("click", searchLocation);
+    mapSearch.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        searchLocation();
+      }
+    });
+
+    useMyLocationBtn.addEventListener("click", () => {
+      if (!navigator.geolocation) {
+        setStatus("Geolocation not supported.");
+        return;
+      }
+      setStatus("Locating...");
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          setStatus("");
+          const lat = pos.coords.latitude;
+          const lon = pos.coords.longitude;
+          setLocation(lat, lon, "");
+          const label = await reverseGeocode(lat, lon);
+          if (label) {
+            addressInput.value = label;
+            if (!placeInput.value) placeInput.value = label;
+          }
+        },
+        () => {
+          setStatus("Location permission denied.");
+        }
+      );
+    });
+
+    initMap();
+  </script>
 </body>
 </html>

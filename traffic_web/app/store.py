@@ -21,6 +21,8 @@ class Job:
     outputs: Optional[dict] = None
     metrics: Optional[dict] = None
     settings: Optional[dict] = None
+    intersection: Optional[dict] = None
+    location: Optional[dict] = None
     error: Optional[str] = None
     logs: Optional[list] = None
 

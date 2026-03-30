@@ -1,0 +1,74 @@
+{% extends "admin/base.html" %}
+{% block content %}
+  <h1>Runs</h1>
+  <div style="margin:12px 0;">
+    <a class="btn btn-primary" href="/upload">New Run</a>
+  </div>
+  <div class="box" style="margin-bottom:12px;">
+    <form method="get">
+      <div class="grid grid-2">
+        <div>
+          <label style="display:block; font-weight:600; margin-bottom:6px;">Search Videos</label>
+          <input type="text" name="q" value="{{ filters.q or '' }}" placeholder="Video ID, title, place, filename" style="width:100%; padding:8px; margin-bottom:12px;">
+        </div>
+        <div>
+          <label style="display:block; font-weight:600; margin-bottom:6px;">User</label>
+          <input type="text" name="user" value="{{ filters.user or '' }}" placeholder="Username, email, or ID" style="width:100%; padding:8px; margin-bottom:12px;">
+        </div>
+      </div>
+      <div class="grid grid-2">
+        <div>
+          <label style="display:block; font-weight:600; margin-bottom:6px;">Date From</label>
+          <input type="date" name="date_from" value="{{ filters.date_from or '' }}" style="width:100%; padding:8px; margin-bottom:12px;">
+        </div>
+        <div>
+          <label style="display:block; font-weight:600; margin-bottom:6px;">Date To</label>
+          <input type="date" name="date_to" value="{{ filters.date_to or '' }}" style="width:100%; padding:8px; margin-bottom:12px;">
+        </div>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-outline" type="submit">Filter</button>
+        <a class="btn btn-ghost" href="/admin/runs">Clear</a>
+      </div>
+      {% if error %}
+        <div class="tag" style="margin-top:12px; background:#ffecec; color:#b00020; border-color:#f5c2c7;">
+          {{ error }}
+        </div>
+      {% endif %}
+    </form>
+  </div>
+  <div class="box">
+    <table>
+      <tr>
+        <th>ID</th>
+        <th>Video ID</th>
+        <th>Title</th>
+        <th>Place</th>
+        <th>Recorded At</th>
+        <th>Status</th>
+        <th>Owner</th>
+        <th>Created</th>
+        <th>Actions</th>
+      </tr>
+      {% for r in runs %}
+        <tr>
+          <td>{{ r.id }}</td>
+          <td>{{ r.job_id }}</td>
+          <td>{{ r.title or "" }}</td>
+          <td>{{ r.place or "" }}</td>
+          <td>{{ r.recorded_at or "" }}</td>
+          <td>{{ r.status }}</td>
+          <td>{{ owners.get(r.owner_user_id, r.owner_user_id or "") }}</td>
+          <td>{{ r.created_at }}</td>
+          <td style="display:flex; gap:8px; flex-wrap:wrap;">
+            <a href="/admin/runs/{{ r.id }}">View</a>
+            <a href="/admin/runs/{{ r.id }}/edit">Edit</a>
+            <form method="post" action="/admin/runs/{{ r.id }}/delete" style="display:inline;">
+              <button class="btn btn-outline" type="submit">Delete</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+    </table>
+  </div>
+{% endblock %}

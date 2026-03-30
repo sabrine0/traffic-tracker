@@ -1,0 +1,32 @@
+{% extends "admin/base.html" %}
+{% block content %}
+  <h1>Config Presets</h1>
+  <div class="box">
+    <a class="btn btn-primary" href="/admin/presets/new">New Preset</a>
+  </div>
+  <div class="box">
+    <table>
+      <tr>
+        <th>ID</th>
+        <th>Name</th>
+        <th>Active</th>
+        <th>Created</th>
+        <th>Actions</th>
+      </tr>
+      {% for p in presets %}
+        <tr>
+          <td>{{ p.id }}</td>
+          <td>{{ p.name }}</td>
+          <td>{{ "Yes" if p.is_active else "No" }}</td>
+          <td>{{ p.created_at }}</td>
+          <td style="display:flex; gap:8px; flex-wrap:wrap;">
+            <a href="/admin/presets/{{ p.id }}/edit">Edit</a>
+            <form method="post" action="/admin/presets/{{ p.id }}/delete" style="display:inline;">
+              <button class="btn btn-outline" type="submit">Delete</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+    </table>
+  </div>
+{% endblock %}

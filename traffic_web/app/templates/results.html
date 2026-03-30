@@ -4,14 +4,25 @@
   <meta charset="utf-8" />
   <title>Results</title>
   <link rel="stylesheet" href="/static/styles.css" />
+  {% if location %}
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  {% endif %}
 </head>
 <body>
   <div class="nav">
     <div class="brand">Traffic Tracker</div>
     <div class="nav-links">
-      <a href="/">Home</a>
-      <a href="/upload">Upload</a>
-      <a href="/jobs">Videos</a>
+      {% if user %}
+        <a href="/">Home</a>
+        <a href="/admin">Dashboard</a>
+        {% if user.role != 'viewer' %}
+          <a href="/upload">New Run</a>
+          <a href="/upload">Upload</a>
+        {% endif %}
+        <a href="/jobs">Videos</a>
+      {% else %}
+        <a href="/admin/login">Login</a>
+      {% endif %}
     </div>
   </div>
 
@@ -24,28 +35,50 @@
     </div>
     <p>Video ID: <code>{{ job_id }}</code></p>
     <p>Detecting: {{ selected_classes | join(", ") }}</p>
-
-    <div class="box">
-      <div style="display:flex; gap:12px; flex-wrap:wrap;">
-        <button class="btn btn-primary" onclick="window.location.href='/zones/{{job_id}}'">Draw/Edit Zones</button>
-        <button id="btnProcess" class="btn btn-dark">Process</button>
+    <p>Device: {{ device_label }}</p>
+    {% if not user %}
+      <div class="tag" style="background:#fff6e5; color:#8a5b00; border-color:#f2c97d;">
+        Login required to view or download protected outputs.
       </div>
-    </div>
+    {% endif %}
+
+    {% if user and user.role != 'viewer' %}
+      <div class="box">
+        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+          <button class="btn btn-primary" onclick="window.location.href='/zones/{{job_id}}'">Draw/Edit Zones</button>
+          <a class="btn btn-outline" href="/intersection/{{job_id}}">Intersection</a>
+          <button id="btnProcess" class="btn btn-dark">Process</button>
+        </div>
+      </div>
+    {% endif %}
 
     <div class="box">
       <h3>Detection Types</h3>
-      <p>Choose what to detect. Saved types are used on the next Process run.</p>
+      <p>Choose what to detect and the device to use. Saved settings are used on the next Process run.</p>
       <div style="display:flex; gap:16px; flex-wrap:wrap; margin-top:8px;">
         {% for opt in class_options %}
           <label style="display:flex; gap:8px; align-items:center;">
-            <input type="checkbox" class="clsOpt" value="{{ opt.key }}" {% if opt.key in selected_classes %}checked{% endif %}>
+            <input type="checkbox" class="clsOpt" value="{{ opt.key }}" {% if opt.key in selected_classes %}checked{% endif %} {% if user and user.role == 'viewer' %}disabled{% endif %}>
             <span>{{ opt.label }}</span>
           </label>
         {% endfor %}
       </div>
-      <div style="margin-top:12px;">
-        <button id="btnSaveClasses" class="btn btn-outline">Save Types</button>
+      <div style="margin-top:16px;">
+        <label for="deviceSelect" style="display:block; font-weight:600; margin-bottom:6px;">Processing device</label>
+        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+          <select id="deviceSelect" {% if user and user.role == 'viewer' %}disabled{% endif %}>
+            {% for opt in device_options %}
+              <option value="{{ opt.key }}" {% if opt.key == selected_device %}selected{% endif %}>{{ opt.label }}</option>
+            {% endfor %}
+          </select>
+          <span style="color:var(--muted); font-size:13px;">Auto uses GPU if available. GPU requires CUDA.</span>
+        </div>
       </div>
+      {% if user and user.role != 'viewer' %}
+        <div style="margin-top:12px;">
+          <button id="btnSaveClasses" class="btn btn-outline">Save Settings</button>
+        </div>
+      {% endif %}
       <div style="margin-top:16px;">
         <table>
           <tr>
@@ -61,6 +94,16 @@
         </table>
       </div>
     </div>
+
+    {% if location %}
+      <div class="box" style="margin-top:16px;">
+        <h3>Location</h3>
+        {% if location.address %}
+          <p>{{ location.address }}</p>
+        {% endif %}
+        <div id="resultsMap" class="map"></div>
+      </div>
+    {% endif %}
 
     <div class="box">
       {% if status == "failed" %}
@@ -206,25 +249,28 @@
   const jobId = "{{ job_id }}";
   const status = "{{ status }}";
 
-  document.getElementById("btnProcess").addEventListener("click", async () => {
-    try {
-      let url = `/api/process/${jobId}`;
-      if (status === "processing" || status === "running") {
-        const ok = confirm("Video is already processing. Restart it?");
-        if (!ok) return;
-        url += "?force=1";
+  const processBtn = document.getElementById("btnProcess");
+  if (processBtn) {
+    processBtn.addEventListener("click", async () => {
+      try {
+        let url = `/api/process/${jobId}`;
+        if (status === "processing" || status === "running") {
+          const ok = confirm("Video is already processing. Restart it?");
+          if (!ok) return;
+          url += "?force=1";
+        }
+        const r = await fetch(url, { method: "POST" });
+        const data = await r.json();
+        if (!data.ok) {
+          alert("Process error: " + (data.error || "unknown"));
+          return;
+        }
+        window.location.reload();
+      } catch (e) {
+        alert("Failed to start processing: " + e);
       }
-      const r = await fetch(url, { method: "POST" });
-      const data = await r.json();
-      if (!data.ok) {
-        alert("Process error: " + (data.error || "unknown"));
-        return;
-      }
-      window.location.reload();
-    } catch (e) {
-      alert("Failed to start processing: " + e);
-    }
-  });
+    });
+  }
 
   if (status === "processing") {
     setTimeout(() => window.location.reload(), 2000);
@@ -236,11 +282,13 @@
       const selected = Array.from(document.querySelectorAll(".clsOpt"))
         .filter((el) => el.checked)
         .map((el) => el.value);
+      const deviceEl = document.getElementById("deviceSelect");
+      const device = deviceEl ? deviceEl.value : "auto";
       try {
         const r = await fetch(`/api/settings/${jobId}`, {
           method: "POST",
           headers: {"Content-Type":"application/json"},
-          body: JSON.stringify({ classes: selected })
+          body: JSON.stringify({ classes: selected, device })
         });
         const data = await r.json();
         if (!data.ok) {
@@ -255,6 +303,21 @@
     });
   }
 </script>
+
+{% if location %}
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const loc = {{ location | tojson }};
+    if (loc && loc.lat !== undefined && loc.lon !== undefined) {
+      const map = L.map("resultsMap").setView([loc.lat, loc.lon], 16);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "&copy; OpenStreetMap contributors"
+      }).addTo(map);
+      L.marker([loc.lat, loc.lon]).addTo(map);
+    }
+  </script>
+{% endif %}
 
 </body>
 </html>

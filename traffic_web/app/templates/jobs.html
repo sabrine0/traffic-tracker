@@ -9,9 +9,17 @@
   <div class="nav">
     <div class="brand">Traffic Tracker</div>
     <div class="nav-links">
-      <a href="/">Home</a>
-      <a href="/upload">Upload</a>
-      <a href="/jobs">Videos</a>
+      {% if user %}
+        <a href="/">Home</a>
+        <a href="/admin">Dashboard</a>
+        {% if user.role != 'viewer' %}
+          <a href="/upload">New Run</a>
+          <a href="/upload">Upload</a>
+        {% endif %}
+        <a href="/jobs">Videos</a>
+      {% else %}
+        <a href="/admin/login">Login</a>
+      {% endif %}
     </div>
   </div>
 
@@ -21,7 +29,7 @@
     <p>Review recent videos and jump into results or zone editing.</p>
 
     {% if not jobs %}
-      <div class="card">No jobs yet. <a href="/upload">Upload a video</a>.</div>
+      <div class="card">No videos yet. <a href="/upload">Upload a video</a>.</div>
     {% endif %}
 
     <div class="grid grid-2" style="margin-top:16px;">
@@ -38,7 +46,9 @@
           <p>Created: {{ j.created_at }}</p>
           <div style="margin-top:12px;">
             <a class="btn btn-outline" href="/results/{{ j.id }}">View Results</a>
-            <a class="btn btn-ghost" href="/zones/{{ j.id }}" style="margin-left:8px;">Edit Zones</a>
+            {% if user and user.role != 'viewer' %}
+              <a class="btn btn-ghost" href="/zones/{{ j.id }}" style="margin-left:8px;">Edit Zones</a>
+            {% endif %}
           </div>
         </div>
       {% endfor %}

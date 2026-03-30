@@ -1,0 +1,1104 @@
+
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Intersection Capacity</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  {% if location %}
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  {% endif %}
+</head>
+<body>
+  <div class="nav">
+    <div class="brand">Traffic Tracker</div>
+    <div class="nav-links">
+      {% if user %}
+        <a href="/">Home</a>
+        <a href="/admin">Dashboard</a>
+        {% if user.role != 'viewer' %}
+          <a href="/upload">New Run</a>
+          <a href="/upload">Upload</a>
+        {% endif %}
+        <a href="/jobs">Videos</a>
+      {% else %}
+        <a href="/admin/login">Login</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="container">
+    <span class="tag">Video {{ job_id }}</span>
+    <h1>Intersection Capacity</h1>
+    {% if duration_hours %}
+      <p>Video duration: {{ "%.2f" | format(duration_hours) }} hours.</p>
+    {% else %}
+      <p>Video duration not available. Volumes will be shown as counts, not veh/h.</p>
+    {% endif %}
+
+    <div class="box">
+      <h3>Intersection Info</h3>
+      <div class="grid grid-3">
+        <label>
+          Name
+          <input id="intName" type="text" placeholder="Intersection name">
+        </label>
+        <label>
+          City
+          <input id="intCity" type="text" placeholder="City">
+        </label>
+        <label>
+          Lat, Lon
+          <div style="display:flex; gap:8px;">
+            <input id="intLat" type="number" step="0.000001" placeholder="Lat">
+            <input id="intLon" type="number" step="0.000001" placeholder="Lon">
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <div class="box" style="margin-top:16px;">
+      <h3>Signal Settings</h3>
+      <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+        <label>
+          Saturation flow (veh/h/lane)
+          <input id="satFlow" type="number" min="200" max="4000" step="50">
+        </label>
+        <label>
+          Cycle length (sec)
+          <input id="cycleLen" type="number" min="20" max="300" step="1">
+        </label>
+        <label>
+          PHF
+          <input id="phfInput" type="number" min="0.5" max="1" step="0.01">
+        </label>
+        <label>
+          Heavy % (trucks/buses)
+          <input id="heavyPct" type="number" min="0" max="30" step="0.5">
+        </label>
+        <label>
+          HVF
+          <input id="hvfInput" type="number" min="0.5" max="1" step="0.01" readonly>
+        </label>
+        <button class="btn btn-outline" id="applySignal">Apply</button>
+        <button class="btn btn-ghost" id="presetTwoPhase">Simple 2-Phase Preset</button>
+      </div>
+      <p style="font-size:12px; color:var(--muted); margin-top:6px;">
+        Capacity uses: <b>s × lanes × (g/C) × PHF × HVF</b>. HVF is derived from Heavy % using a simple adjustment.
+      </p>
+    </div>
+
+    <div class="box" style="margin-top:16px;">
+      <h3>Approaches</h3>
+      <p>Comma-separated approach names (e.g., North, South, East, West).</p>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+        <input id="approachInput" type="text" style="flex:1; min-width:220px;">
+        <button class="btn btn-outline" id="applyApproaches">Apply Approaches</button>
+        <button class="btn btn-ghost" id="autoFillLanes">Auto-fill lanes (OSM)</button>
+      </div>
+      <div style="margin-top:12px;">
+        <table>
+          <thead>
+            <tr>
+              <th>Approach</th>
+              <th>Left</th>
+              <th>Through</th>
+              <th>Right</th>
+              <th>LT</th>
+              <th>TR</th>
+            </tr>
+          </thead>
+          <tbody id="laneBody"></tbody>
+        </table>
+        <p style="font-size:12px; color:var(--muted); margin-top:6px;" id="laneStatus"></p>
+      </div>
+    </div>
+    <div class="box" style="margin-top:16px;">
+      <h3>Zone → Approach Mapping</h3>
+      <p>Assign each vehicle zone to an approach direction.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Zone</th>
+            <th>Approach</th>
+          </tr>
+        </thead>
+        <tbody id="zoneBody"></tbody>
+      </table>
+    </div>
+
+    <div class="box" style="margin-top:16px;">
+      <h3>Approach Movements</h3>
+      <p>Assign each approach OD pair to Left/Through/Right.</p>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
+        <button class="btn btn-ghost" id="autoAssignMoves">Auto-assign N/S/E/W</button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Entry Approach</th>
+            <th>Exit Approach</th>
+            <th>Count</th>
+            <th>Movement</th>
+          </tr>
+        </thead>
+        <tbody id="movementBody"></tbody>
+      </table>
+    </div>
+
+    <div class="box" style="margin-top:16px;">
+      <h3>Signal Phases</h3>
+      <div id="phasesList"></div>
+      <div style="margin-top:12px;">
+        <button class="btn btn-outline" id="addPhase">Add Phase</button>
+      </div>
+    </div>
+
+    <div class="box" style="margin-top:16px;">
+      <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
+        <h3>Intersection Report</h3>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn btn-primary" id="saveIntersection">Save Settings</button>
+          <button class="btn btn-outline" id="exportJson">Export JSON</button>
+          <button class="btn btn-outline" id="exportExcel">Export Excel</button>
+        </div>
+      </div>
+      <table style="margin-top:12px;">
+        <thead>
+          <tr>
+            <th>Approach</th>
+            <th>Movement</th>
+            <th>Lane Group</th>
+            <th>Volume</th>
+            <th>Lanes</th>
+            <th>Green (sec)</th>
+            <th>Capacity</th>
+            <th>PHF</th>
+            <th>HVF</th>
+            <th>X</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="resultsBody"></tbody>
+      </table>
+      <div class="grid grid-3" style="margin-top:12px;">
+        <div class="card">
+          <h3>Critical Group</h3>
+          <p id="criticalGroup">n/a</p>
+        </div>
+        <div class="card">
+          <h3>Critical X</h3>
+          <p id="criticalX">n/a</p>
+        </div>
+        <div class="card">
+          <h3>Overall Status</h3>
+          <p id="overallStatus">n/a</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="box" style="margin-top:16px;">
+      <h3>Recommendations</h3>
+      <ul id="recoList"></ul>
+    </div>
+
+    <div class="box" style="margin-top:16px;">
+      <h3>Intersection Diagram</h3>
+      <div class="diagram" id="diagram"></div>
+    </div>
+
+    {% if location %}
+      <div class="box" style="margin-top:16px;">
+        <h3>Location</h3>
+        {% if location.address %}
+          <p>{{ location.address }}</p>
+        {% endif %}
+        <div id="intersectionMap" class="map"></div>
+      </div>
+    {% endif %}
+  </div>
+
+<script>
+  const jobId = "{{ job_id }}";
+  const durationHours = {{ duration_hours if duration_hours else "null" }};
+  const approachesSeed = {{ approaches | tojson }};
+  const vehicleZones = {{ vehicle_zones | tojson }};
+  const odZoneRows = {{ od_zone_rows | tojson }};
+  const initialConfig = {{ intersection_config | tojson }};
+  const locationData = {{ location | tojson }};
+
+  const movementTypes = ["left", "through", "right", "ignore"];
+
+  const intName = document.getElementById("intName");
+  const intCity = document.getElementById("intCity");
+  const intLat = document.getElementById("intLat");
+  const intLon = document.getElementById("intLon");
+
+  const satFlowInput = document.getElementById("satFlow");
+  const cycleLenInput = document.getElementById("cycleLen");
+  const phfInput = document.getElementById("phfInput");
+  const heavyPctInput = document.getElementById("heavyPct");
+  const hvfInput = document.getElementById("hvfInput");
+  const applySignalBtn = document.getElementById("applySignal");
+  const presetTwoPhaseBtn = document.getElementById("presetTwoPhase");
+
+  const approachInput = document.getElementById("approachInput");
+  const applyApproachesBtn = document.getElementById("applyApproaches");
+  const autoFillLanesBtn = document.getElementById("autoFillLanes");
+  const laneBody = document.getElementById("laneBody");
+  const laneStatus = document.getElementById("laneStatus");
+
+  const zoneBody = document.getElementById("zoneBody");
+  const movementBody = document.getElementById("movementBody");
+  const autoAssignMovesBtn = document.getElementById("autoAssignMoves");
+
+  const phasesList = document.getElementById("phasesList");
+  const addPhaseBtn = document.getElementById("addPhase");
+
+  const resultsBody = document.getElementById("resultsBody");
+  const recoList = document.getElementById("recoList");
+  const diagram = document.getElementById("diagram");
+  const criticalGroupEl = document.getElementById("criticalGroup");
+  const criticalXEl = document.getElementById("criticalX");
+  const overallStatusEl = document.getElementById("overallStatus");
+
+  const saveBtn = document.getElementById("saveIntersection");
+  const exportJsonBtn = document.getElementById("exportJson");
+  const exportExcelBtn = document.getElementById("exportExcel");
+
+  let config = initialConfig || {};
+
+  function setStatus(text) {
+    laneStatus.textContent = text || "";
+  }
+
+  function ensureConfig() {
+    if (!config || typeof config !== "object") config = {};
+    if (!Array.isArray(config.approaches) || !config.approaches.length) {
+      config.approaches = approachesSeed && approachesSeed.length ? approachesSeed : ["North","South","East","West"];
+    }
+    if (!config.lane_groups || typeof config.lane_groups !== "object") config.lane_groups = {};
+    if (!config.zone_map || typeof config.zone_map !== "object") config.zone_map = {};
+    if (!config.movement_map || typeof config.movement_map !== "object") config.movement_map = {};
+    if (!Array.isArray(config.phases)) config.phases = [];
+    if (!config.saturation_flow) config.saturation_flow = 1800;
+    if (!config.cycle_length) config.cycle_length = 90;
+    if (!config.phf) config.phf = 0.92;
+    if (config.heavy_pct === undefined || config.heavy_pct === null) config.heavy_pct = 5;
+    if (!config.hvf) config.hvf = 1 / (1 + (config.heavy_pct / 100));
+    if (!config.name) config.name = "";
+    if (!config.city) config.city = "";
+
+    for (const a of config.approaches) {
+      if (!config.lane_groups[a]) {
+        config.lane_groups[a] = { left: 1, through: 1, right: 0, lt: 0, tr: 0 };
+      } else {
+        const g = config.lane_groups[a];
+        for (const k of ["left","through","right","lt","tr"]) {
+          if (g[k] === undefined) g[k] = 0;
+        }
+      }
+    }
+
+    if (!config.phases.length) {
+      applyTwoPhasePreset();
+    }
+  }
+
+  function applyTwoPhasePreset() {
+    const list = config.approaches.slice();
+    const cycle = Number(config.cycle_length || 90);
+    const per = Math.max(10, Math.round(cycle / Math.max(1, list.length >= 2 ? 2 : 1)));
+    const half = Math.max(1, Math.floor(list.length / 2));
+    const phase1 = [];
+    const phase2 = [];
+    list.slice(0, half).forEach((a) => {
+      phase1.push(`${a}:through`, `${a}:right`);
+    });
+    list.slice(half).forEach((a) => {
+      phase2.push(`${a}:through`, `${a}:right`);
+    });
+    config.phases = [
+      { name: "Phase 1", green: per, movements: phase1 },
+      { name: "Phase 2", green: per, movements: phase2 },
+    ];
+  }
+  function setIntersectionFields() {
+    intName.value = config.name || "";
+    intCity.value = config.city || "";
+    if (config.lat !== undefined && config.lat !== null) intLat.value = config.lat;
+    else if (locationData && locationData.lat !== undefined) intLat.value = locationData.lat;
+    if (config.lon !== undefined && config.lon !== null) intLon.value = config.lon;
+    else if (locationData && locationData.lon !== undefined) intLon.value = locationData.lon;
+  }
+
+  function computeHVF(heavyPct) {
+    const pct = Math.max(0, Math.min(30, Number(heavyPct || 0)));
+    return 1 / (1 + (pct / 100));
+  }
+
+  function syncIntersectionFields() {
+    config.name = intName.value.trim();
+    config.city = intCity.value.trim();
+    const lat = parseFloat(intLat.value);
+    const lon = parseFloat(intLon.value);
+    config.lat = Number.isFinite(lat) ? lat : null;
+    config.lon = Number.isFinite(lon) ? lon : null;
+  }
+
+  function renderApproachesInput() {
+    approachInput.value = config.approaches.join(", ");
+  }
+
+  function updateApproaches(newList) {
+    const cleaned = newList.map((x) => x.trim()).filter(Boolean);
+    if (!cleaned.length) return;
+    config.approaches = cleaned;
+    const nextGroups = {};
+    for (const a of cleaned) {
+      nextGroups[a] = config.lane_groups[a] || { left: 1, through: 1, right: 0, lt: 0, tr: 0 };
+    }
+    config.lane_groups = nextGroups;
+    for (const z of Object.keys(config.zone_map)) {
+      if (!cleaned.includes(config.zone_map[z])) delete config.zone_map[z];
+    }
+    const nextMovementMap = {};
+    for (const key of Object.keys(config.movement_map)) {
+      const parts = key.split("->");
+      if (parts.length !== 2) continue;
+      if (cleaned.includes(parts[0]) && cleaned.includes(parts[1])) {
+        nextMovementMap[key] = config.movement_map[key];
+      }
+    }
+    config.movement_map = nextMovementMap;
+    config.phases = config.phases.map((ph) => {
+      const mv = Array.isArray(ph.movements) ? ph.movements : [];
+      const filtered = mv.filter((m) => {
+        const parts = String(m).split(":");
+        return parts.length === 2 && cleaned.includes(parts[0]) && ["left","through","right"].includes(parts[1]);
+      });
+      return { name: ph.name, green: ph.green, movements: filtered };
+    });
+  }
+
+  function renderLaneTable() {
+    laneBody.innerHTML = "";
+    for (const a of config.approaches) {
+      const g = config.lane_groups[a];
+      const tr = document.createElement("tr");
+      const nameTd = document.createElement("td");
+      nameTd.textContent = a;
+      tr.appendChild(nameTd);
+      for (const k of ["left","through","right","lt","tr"]) {
+        const td = document.createElement("td");
+        const input = document.createElement("input");
+        input.type = "number";
+        input.min = "0";
+        input.value = g[k] || 0;
+        input.addEventListener("change", () => {
+          g[k] = Number(input.value || 0);
+          renderResults();
+        });
+        td.appendChild(input);
+        tr.appendChild(td);
+      }
+      laneBody.appendChild(tr);
+    }
+  }
+
+  function renderZoneTable() {
+    zoneBody.innerHTML = "";
+    for (const z of vehicleZones) {
+      const tr = document.createElement("tr");
+      const tdZone = document.createElement("td");
+      tdZone.textContent = z;
+      tr.appendChild(tdZone);
+      const tdSel = document.createElement("td");
+      const sel = document.createElement("select");
+      const blank = document.createElement("option");
+      blank.value = "";
+      blank.textContent = "Unassigned";
+      sel.appendChild(blank);
+      for (const a of config.approaches) {
+        const opt = document.createElement("option");
+        opt.value = a;
+        opt.textContent = a;
+        sel.appendChild(opt);
+      }
+      sel.value = config.zone_map[z] || "";
+      sel.addEventListener("change", () => {
+        if (!sel.value) delete config.zone_map[z];
+        else config.zone_map[z] = sel.value;
+        renderMovementTable();
+        renderResults();
+      });
+      tdSel.appendChild(sel);
+      tr.appendChild(tdSel);
+      zoneBody.appendChild(tr);
+    }
+  }
+
+  function computeApproachOD() {
+    const counts = {};
+    for (const a of config.approaches) {
+      counts[a] = {};
+      for (const b of config.approaches) {
+        counts[a][b] = 0;
+      }
+    }
+    for (const row of odZoneRows) {
+      const entryApproach = config.zone_map[row.entry];
+      const exitApproach = config.zone_map[row.exit];
+      if (!entryApproach || !exitApproach) continue;
+      if (!counts[entryApproach] || counts[entryApproach][exitApproach] === undefined) continue;
+      counts[entryApproach][exitApproach] += Number(row.count || 0);
+    }
+    return counts;
+  }
+
+  function renderMovementTable() {
+    movementBody.innerHTML = "";
+    const counts = computeApproachOD();
+    for (const entry of config.approaches) {
+      for (const exit of config.approaches) {
+        if (entry === exit) continue;
+        const count = counts[entry][exit] || 0;
+        const key = `${entry}->${exit}`;
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${entry}</td>
+          <td>${exit}</td>
+          <td>${count}</td>
+        `;
+        const tdSel = document.createElement("td");
+        const sel = document.createElement("select");
+        for (const opt of movementTypes) {
+          const o = document.createElement("option");
+          o.value = opt;
+          o.textContent = opt;
+          sel.appendChild(o);
+        }
+        sel.value = config.movement_map[key] || "through";
+        sel.addEventListener("change", () => {
+          config.movement_map[key] = sel.value;
+          renderResults();
+        });
+        tdSel.appendChild(sel);
+        tr.appendChild(tdSel);
+        movementBody.appendChild(tr);
+      }
+    }
+  }
+
+  function renderPhases() {
+    phasesList.innerHTML = "";
+    const movements = [];
+    for (const a of config.approaches) {
+      for (const m of ["left","through","right"]) {
+        movements.push(`${a}:${m}`);
+      }
+    }
+    config.phases.forEach((ph, idx) => {
+      const card = document.createElement("div");
+      card.className = "card";
+      card.style.marginBottom = "12px";
+      const header = document.createElement("div");
+      header.style.display = "flex";
+      header.style.gap = "8px";
+      header.style.flexWrap = "wrap";
+      header.style.alignItems = "center";
+      const nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.value = ph.name || `Phase ${idx + 1}`;
+      nameInput.addEventListener("change", () => {
+        ph.name = nameInput.value;
+      });
+      const greenInput = document.createElement("input");
+      greenInput.type = "number";
+      greenInput.min = "1";
+      greenInput.value = ph.green || 10;
+      greenInput.addEventListener("change", () => {
+        ph.green = Number(greenInput.value || 0);
+        renderResults();
+      });
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "btn btn-ghost";
+      removeBtn.textContent = "Remove";
+      removeBtn.addEventListener("click", () => {
+        config.phases.splice(idx, 1);
+        renderPhases();
+        renderResults();
+      });
+      header.appendChild(document.createTextNode("Name"));
+      header.appendChild(nameInput);
+      header.appendChild(document.createTextNode("Green (sec)"));
+      header.appendChild(greenInput);
+      header.appendChild(removeBtn);
+      card.appendChild(header);
+
+      const grid = document.createElement("div");
+      grid.className = "grid grid-3";
+      grid.style.marginTop = "12px";
+      for (const mv of movements) {
+        const label = document.createElement("label");
+        label.style.display = "flex";
+        label.style.gap = "6px";
+        label.style.alignItems = "center";
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = Array.isArray(ph.movements) && ph.movements.includes(mv);
+        cb.addEventListener("change", () => {
+          if (!Array.isArray(ph.movements)) ph.movements = [];
+          if (cb.checked) {
+            if (!ph.movements.includes(mv)) ph.movements.push(mv);
+          } else {
+            ph.movements = ph.movements.filter((x) => x !== mv);
+          }
+          renderResults();
+        });
+        const txt = document.createElement("span");
+        txt.textContent = mv;
+        label.appendChild(cb);
+        label.appendChild(txt);
+        grid.appendChild(label);
+      }
+      card.appendChild(grid);
+      phasesList.appendChild(card);
+    });
+  }
+  function movementGreens() {
+    const greens = {};
+    for (const a of config.approaches) {
+      greens[a] = { left: 0, through: 0, right: 0 };
+    }
+    for (const ph of config.phases) {
+      const g = Number(ph.green || 0);
+      const mv = Array.isArray(ph.movements) ? ph.movements : [];
+      for (const m of mv) {
+        const parts = String(m).split(":");
+        if (parts.length !== 2) continue;
+        const a = parts[0];
+        const mvType = parts[1];
+        if (!greens[a] || greens[a][mvType] === undefined) continue;
+        greens[a][mvType] += g;
+      }
+    }
+    return greens;
+  }
+
+  function movementGroupMap(lanes) {
+    const map = { left: [], through: [], right: [] };
+    if (lanes.left > 0) map.left.push({ group: "L", weight: 1 });
+    else if (lanes.lt > 0) map.left.push({ group: "LT", weight: 1 });
+
+    if (lanes.right > 0) map.right.push({ group: "R", weight: 1 });
+    else if (lanes.tr > 0) map.right.push({ group: "TR", weight: 1 });
+
+    if (lanes.through > 0) {
+      map.through.push({ group: "T", weight: 1 });
+    } else {
+      const totalShared = (lanes.lt > 0 ? lanes.lt : 0) + (lanes.tr > 0 ? lanes.tr : 0);
+      if (totalShared > 0) {
+        if (lanes.lt > 0) map.through.push({ group: "LT", weight: lanes.lt / totalShared });
+        if (lanes.tr > 0) map.through.push({ group: "TR", weight: lanes.tr / totalShared });
+      }
+    }
+    return map;
+  }
+
+  function groupMovementsFromMap(map, group) {
+    const out = [];
+    for (const mv of ["left", "through", "right"]) {
+      if (map[mv].some((x) => x.group === group)) out.push(mv);
+    }
+    return out;
+  }
+
+  function computeVolumes() {
+    const counts = computeApproachOD();
+    const volumes = {};
+    for (const a of config.approaches) {
+      volumes[a] = { left: 0, through: 0, right: 0 };
+    }
+    for (const entry of config.approaches) {
+      for (const exit of config.approaches) {
+        if (entry === exit) continue;
+        const count = counts[entry][exit] || 0;
+        const key = `${entry}->${exit}`;
+        const mv = config.movement_map[key] || "through";
+        if (mv === "ignore") continue;
+        volumes[entry][mv] += count;
+      }
+    }
+    if (durationHours && durationHours > 0) {
+      for (const a of config.approaches) {
+        for (const mv of ["left","through","right"]) {
+          volumes[a][mv] = volumes[a][mv] / durationHours;
+        }
+      }
+    }
+    return volumes;
+  }
+
+  function statusForX(x) {
+    if (x === null || Number.isNaN(x)) return { label: "n/a", cls: "status-muted" };
+    if (x < 0.85) return { label: "good", cls: "status-green" };
+    if (x <= 1.0) return { label: "near", cls: "status-orange" };
+    return { label: "over", cls: "status-red" };
+  }
+
+  function renderResults() {
+    resultsBody.innerHTML = "";
+    recoList.innerHTML = "";
+    diagram.innerHTML = "";
+
+    syncIntersectionFields();
+
+    const volumes = computeVolumes();
+    const satFlow = Number(config.saturation_flow || 1800);
+    const cycle = Number(config.cycle_length || 90);
+
+    let critical = { key: null, x: -1 };
+    const recos = [];
+    const rows = [];
+
+    for (const a of config.approaches) {
+      const lanes = config.lane_groups[a];
+      const map = movementGroupMap(lanes);
+      const groupVolumes = { L: 0, T: 0, R: 0, LT: 0, TR: 0 };
+      for (const mv of ["left","through","right"]) {
+        const vol = volumes[a][mv] || 0;
+        for (const part of map[mv]) {
+          groupVolumes[part.group] += vol * part.weight;
+        }
+      }
+
+      for (const group of ["L","T","R","LT","TR"]) {
+        const lanesCount = lanes[group.toLowerCase()] || lanes[group] || 0;
+        const vol = groupVolumes[group] || 0;
+        if (lanesCount <= 0 && vol <= 0) continue;
+        const groupMovements = groupMovementsFromMap(map, group);
+        let greenSum = 0;
+        for (const ph of config.phases) {
+          const mv = Array.isArray(ph.movements) ? ph.movements : [];
+          const served = groupMovements.some((m) => mv.includes(`${a}:${m}`));
+          if (served) greenSum += Number(ph.green || 0);
+        }
+        const capacity = (cycle > 0 && lanesCount > 0 && greenSum > 0)
+          ? satFlow * lanesCount * (greenSum / cycle) * (config.phf || 1) * (config.hvf || 1)
+          : 0;
+        const x = capacity > 0 && durationHours ? (vol / capacity) : null;
+        const status = statusForX(x);
+
+        rows.push({
+          approach: a,
+          movement: groupMovements.join("+") || "n/a",
+          group,
+          volume: durationHours ? Number(vol.toFixed(1)) : Number(vol.toFixed(0)),
+          lanes: lanesCount,
+          green: Number(greenSum.toFixed(1)),
+          capacity: Number(capacity.toFixed(1)),
+          phf: Number((config.phf || 1).toFixed(2)),
+          hvf: Number((config.hvf || 1).toFixed(2)),
+          x: x === null ? null : Number(x.toFixed(2)),
+          status: status.label,
+        });
+
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${a}</td>
+          <td>${groupMovements.join("+") || "n/a"}</td>
+          <td>${group}</td>
+          <td>${durationHours ? vol.toFixed(1) : vol.toFixed(0)}</td>
+          <td>${lanesCount}</td>
+          <td>${greenSum.toFixed(1)}</td>
+          <td>${capacity.toFixed(1)}</td>
+          <td>${(config.phf || 1).toFixed(2)}</td>
+          <td>${(config.hvf || 1).toFixed(2)}</td>
+          <td>${x === null ? "n/a" : x.toFixed(2)}</td>
+          <td><span class="status-chip ${status.cls}">${status.label}</span></td>
+        `;
+        resultsBody.appendChild(tr);
+
+        if (x !== null && x > critical.x) {
+          critical = { key: `${a} ${group}`, x };
+        }
+        if (x !== null && x > 1.0) {
+          recos.push(`${a} ${group}: Increase green split or add lane/phase (X=${x.toFixed(2)}).`);
+        } else if (x !== null && x >= 0.85) {
+          recos.push(`${a} ${group}: Near capacity, consider minor green increase (X=${x.toFixed(2)}).`);
+        }
+        if (x !== null && x >= 0.85 && groupMovements.includes("left")) {
+          const tag = x > 1.0 ? "Critical left turn" : "High left turn";
+          recos.push(`${a} ${group}: ${tag} demand. Consider protected left phase (X=${x.toFixed(2)}).`);
+        }
+      }
+
+      const card = document.createElement("div");
+      card.className = "diagram-card";
+      card.innerHTML = `
+        <div class="diagram-title">${a}</div>
+        <div class="lane-row">
+          <div class="lane-box">L ${lanes.left || 0}</div>
+          <div class="lane-box">T ${lanes.through || 0}</div>
+          <div class="lane-box">R ${lanes.right || 0}</div>
+          <div class="lane-box">LT ${lanes.lt || 0}</div>
+          <div class="lane-box">TR ${lanes.tr || 0}</div>
+        </div>
+      `;
+      diagram.appendChild(card);
+    }
+
+    criticalGroupEl.textContent = critical.key || "n/a";
+    criticalXEl.textContent = critical.x >= 0 ? critical.x.toFixed(2) : "n/a";
+    const overall = statusForX(critical.x).label;
+    overallStatusEl.textContent = overall;
+
+    if ((config.hvf || 1) < 0.9) {
+      recos.push(`Heavy vehicles reduce capacity (HVF=${(config.hvf || 1).toFixed(2)}). Consider mitigation or longer green splits.`);
+    }
+
+    if (!recos.length) {
+      const li = document.createElement("li");
+      li.textContent = "No critical issues detected.";
+      recoList.appendChild(li);
+    } else {
+      for (const r of recos) {
+        const li = document.createElement("li");
+        li.textContent = r;
+        recoList.appendChild(li);
+      }
+    }
+
+    return {
+      rows,
+      summary: {
+        critical_group: critical.key,
+        critical_x: critical.x >= 0 ? Number(critical.x.toFixed(2)) : null,
+        overall_status: overall
+      },
+      recommendations: recos,
+    };
+  }
+  function autoAssignMovements() {
+    const dirMap = {};
+    for (const name of config.approaches) {
+      const key = String(name).trim().toLowerCase();
+      if (key.startsWith("n")) dirMap["N"] = name;
+      if (key.startsWith("s")) dirMap["S"] = name;
+      if (key.startsWith("e")) dirMap["E"] = name;
+      if (key.startsWith("w")) dirMap["W"] = name;
+    }
+    if (!dirMap.N || !dirMap.S || !dirMap.E || !dirMap.W) {
+      alert("Auto-assign requires approaches named North/South/East/West.");
+      return;
+    }
+    const map = {
+      N: { left: "E", through: "S", right: "W" },
+      S: { left: "W", through: "N", right: "E" },
+      E: { left: "S", through: "W", right: "N" },
+      W: { left: "N", through: "E", right: "S" },
+    };
+    for (const entryKey of ["N","S","E","W"]) {
+      const entry = dirMap[entryKey];
+      for (const mv of ["left","through","right"]) {
+        const exitKey = map[entryKey][mv];
+        const exit = dirMap[exitKey];
+        const key = `${entry}->${exit}`;
+        config.movement_map[key] = mv;
+      }
+    }
+    renderMovementTable();
+    renderResults();
+  }
+
+  function parseTurnLanes(text) {
+    const out = { left: 0, through: 0, right: 0, lt: 0, tr: 0 };
+    if (!text) return out;
+    const lanes = String(text).split("|");
+    for (const lane of lanes) {
+      const parts = lane.split(";").map((x) => x.trim());
+      const hasLeft = parts.some((p) => p.includes("left"));
+      const hasRight = parts.some((p) => p.includes("right"));
+      const hasThrough = parts.some((p) => p.includes("through") || p.includes("straight"));
+      if (hasLeft && hasThrough) out.lt += 1;
+      else if (hasThrough && hasRight) out.tr += 1;
+      else if (hasLeft) out.left += 1;
+      else if (hasRight) out.right += 1;
+      else if (hasThrough) out.through += 1;
+    }
+    return out;
+  }
+
+  function bearingToDirection(b) {
+    const deg = (b + 360) % 360;
+    if (deg >= 315 || deg < 45) return "N";
+    if (deg >= 45 && deg < 135) return "E";
+    if (deg >= 135 && deg < 225) return "S";
+    return "W";
+  }
+
+  function computeBearing(p1, p2) {
+    const y = Math.sin((p2.lon - p1.lon) * Math.PI / 180) * Math.cos(p2.lat * Math.PI / 180);
+    const x = Math.cos(p1.lat * Math.PI / 180) * Math.sin(p2.lat * Math.PI / 180) -
+      Math.sin(p1.lat * Math.PI / 180) * Math.cos(p2.lat * Math.PI / 180) * Math.cos((p2.lon - p1.lon) * Math.PI / 180);
+    const brng = Math.atan2(y, x) * 180 / Math.PI;
+    return (brng + 360) % 360;
+  }
+  async function autoFillLanesFromOSM() {
+    syncIntersectionFields();
+    if (!config.lat || !config.lon) {
+      alert("Latitude/Longitude required for auto-fill.");
+      return;
+    }
+    setStatus("Fetching OSM lanes...");
+    try {
+      const query = `
+        [out:json][timeout:25];
+        (
+          way(around:40,${config.lat},${config.lon})[highway];
+        );
+        out tags geom;
+      `;
+      const res = await fetch("https://overpass-api.de/api/interpreter", {
+        method: "POST",
+        body: query,
+      });
+      const data = await res.json();
+      const dirMap = {};
+      for (const name of config.approaches) {
+        const key = String(name).trim().toLowerCase();
+        if (key.startsWith("n")) dirMap["N"] = name;
+        if (key.startsWith("s")) dirMap["S"] = name;
+        if (key.startsWith("e")) dirMap["E"] = name;
+        if (key.startsWith("w")) dirMap["W"] = name;
+      }
+      const canAssign = dirMap.N && dirMap.S && dirMap.E && dirMap.W;
+      if (!canAssign) {
+        setStatus("Auto-fill needs approaches named North/South/East/West.");
+        return;
+      }
+      let applied = 0;
+      for (const el of data.elements || []) {
+        if (!el.geometry || el.geometry.length < 2) continue;
+        const tags = el.tags || {};
+        const genericTurn = parseTurnLanes(tags["turn:lanes"]);
+        const forwardTurn = parseTurnLanes(tags["turn:lanes:forward"]);
+        const backwardTurn = parseTurnLanes(tags["turn:lanes:backward"]);
+        const lanesGeneric = parseInt(tags["lanes"] || "0", 10);
+        const lanesForward = parseInt(tags["lanes:forward"] || "0", 10);
+        const lanesBackward = parseInt(tags["lanes:backward"] || "0", 10);
+
+        const geom = el.geometry.map((p) => ({ lat: p.lat, lon: p.lon }));
+        let minIdx = 0;
+        let minDist = Number.POSITIVE_INFINITY;
+        for (let i = 0; i < geom.length; i++) {
+          const dLat = geom[i].lat - config.lat;
+          const dLon = geom[i].lon - config.lon;
+          const d = dLat * dLat + dLon * dLon;
+          if (d < minDist) {
+            minDist = d;
+            minIdx = i;
+          }
+        }
+        const dirs = [];
+        if (minIdx > 0) dirs.push({ from: geom[minIdx], to: geom[minIdx - 1], dir: "backward" });
+        if (minIdx < geom.length - 1) dirs.push({ from: geom[minIdx], to: geom[minIdx + 1], dir: "forward" });
+
+        for (const d of dirs) {
+          const bearing = computeBearing(d.from, d.to);
+          const dirKey = bearingToDirection(bearing);
+          const approach = canAssign ? dirMap[dirKey] : null;
+          if (!approach) continue;
+          const counts = { left: 0, through: 0, right: 0, lt: 0, tr: 0 };
+          const turnCounts = d.dir === "forward" ? forwardTurn : backwardTurn;
+          const useTurn = (turnCounts.left + turnCounts.through + turnCounts.right + turnCounts.lt + turnCounts.tr) > 0 ? turnCounts : genericTurn;
+          counts.left = useTurn.left;
+          counts.through = useTurn.through;
+          counts.right = useTurn.right;
+          counts.lt = useTurn.lt;
+          counts.tr = useTurn.tr;
+          const laneCount = d.dir === "forward" ? lanesForward : (d.dir === "backward" ? lanesBackward : lanesGeneric);
+          if (laneCount && (counts.left + counts.through + counts.right + counts.lt + counts.tr) === 0) {
+            counts.through = laneCount;
+          }
+          const g = config.lane_groups[approach];
+          for (const k of ["left","through","right","lt","tr"]) {
+            g[k] = Math.max(g[k] || 0, counts[k] || 0);
+          }
+          applied += 1;
+        }
+      }
+      if (!applied) {
+        setStatus("No lane tags found near the point. Please edit manually.");
+      } else {
+        setStatus(`Auto-fill applied to ${applied} approaches. Please review.`);
+      }
+      renderLaneTable();
+      renderResults();
+    } catch (e) {
+      setStatus("Auto-fill failed. Check internet access.");
+    }
+  }
+  function buildReportPayload(rows, summary, recommendations) {
+    return {
+      meta: {
+        name: config.name || "",
+        city: config.city || "",
+        lat: config.lat,
+        lon: config.lon,
+        cycle_length: config.cycle_length,
+        saturation_flow: config.saturation_flow,
+        phf: config.phf,
+        hvf: config.hvf,
+        heavy_pct: config.heavy_pct,
+      },
+      rows,
+      summary,
+      recommendations: Array.isArray(recommendations) ? recommendations : [],
+      config,
+    };
+  }
+
+  function downloadJson(payload) {
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "intersection_report.json";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+  async function exportExcel(payload, download) {
+    try {
+      const r = await fetch(`/api/intersection_report/${jobId}`, {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(payload),
+      });
+      const data = await r.json();
+      if (!data.ok) {
+        alert("Export failed: " + (data.error || "unknown"));
+        return;
+      }
+      if (download && data.xlsx) {
+        window.location.href = data.xlsx;
+      }
+    } catch (e) {
+      alert("Export failed: " + e);
+    }
+  }
+  function bindEvents() {
+    applySignalBtn.addEventListener("click", () => {
+      config.saturation_flow = Number(satFlowInput.value || 1800);
+      config.cycle_length = Number(cycleLenInput.value || 90);
+      config.phf = Number(phfInput.value || 0.92);
+      config.heavy_pct = Number(heavyPctInput.value || 0);
+      config.hvf = computeHVF(config.heavy_pct);
+      hvfInput.value = config.hvf.toFixed(2);
+      renderResults();
+    });
+    phfInput.addEventListener("change", () => {
+      config.phf = Number(phfInput.value || 0.92);
+      renderResults();
+    });
+    heavyPctInput.addEventListener("change", () => {
+      config.heavy_pct = Number(heavyPctInput.value || 0);
+      config.hvf = computeHVF(config.heavy_pct);
+      hvfInput.value = config.hvf.toFixed(2);
+      renderResults();
+    });
+    presetTwoPhaseBtn.addEventListener("click", () => {
+      applyTwoPhasePreset();
+      renderPhases();
+      renderResults();
+    });
+    applyApproachesBtn.addEventListener("click", () => {
+      const list = approachInput.value.split(",");
+      updateApproaches(list);
+      renderApproachesInput();
+      renderLaneTable();
+      renderZoneTable();
+      renderMovementTable();
+      renderPhases();
+      renderResults();
+    });
+    autoFillLanesBtn.addEventListener("click", autoFillLanesFromOSM);
+    autoAssignMovesBtn.addEventListener("click", autoAssignMovements);
+    addPhaseBtn.addEventListener("click", () => {
+      config.phases.push({ name: `Phase ${config.phases.length + 1}`, green: 10, movements: [] });
+      renderPhases();
+      renderResults();
+    });
+    saveBtn.addEventListener("click", async () => {
+      syncIntersectionFields();
+      config.phf = Number(phfInput.value || 0.92);
+      config.heavy_pct = Number(heavyPctInput.value || 0);
+      config.hvf = computeHVF(config.heavy_pct);
+      hvfInput.value = config.hvf.toFixed(2);
+      try {
+        const r = await fetch(`/api/intersection/${jobId}`, {
+          method: "POST",
+          headers: {"Content-Type":"application/json"},
+          body: JSON.stringify(config),
+        });
+        const data = await r.json();
+        if (!data.ok) {
+          alert("Save failed: " + (data.error || "unknown"));
+          return;
+        }
+        const report = renderResults();
+        const payload = buildReportPayload(report.rows, report.summary, report.recommendations);
+        await exportExcel(payload, false);
+        alert("Intersection settings saved + report updated");
+      } catch (e) {
+        alert("Save failed: " + e);
+      }
+    });
+    exportJsonBtn.addEventListener("click", () => {
+      const report = renderResults();
+      const payload = buildReportPayload(report.rows, report.summary, report.recommendations);
+      downloadJson(payload);
+    });
+    exportExcelBtn.addEventListener("click", async () => {
+      const report = renderResults();
+      const payload = buildReportPayload(report.rows, report.summary, report.recommendations);
+      await exportExcel(payload, true);
+    });
+  }
+
+  ensureConfig();
+  setIntersectionFields();
+  satFlowInput.value = config.saturation_flow || 1800;
+  cycleLenInput.value = config.cycle_length || 90;
+  phfInput.value = (config.phf || 0.92).toFixed(2);
+  heavyPctInput.value = config.heavy_pct || 0;
+  config.hvf = computeHVF(config.heavy_pct || 0);
+  hvfInput.value = config.hvf.toFixed(2);
+  renderApproachesInput();
+  renderLaneTable();
+  renderZoneTable();
+  renderMovementTable();
+  renderPhases();
+  renderResults();
+  bindEvents();
+</script>
+
+{% if location %}
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    if (locationData && locationData.lat !== undefined && locationData.lon !== undefined) {
+      const map = L.map("intersectionMap").setView([locationData.lat, locationData.lon], 16);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "&copy; OpenStreetMap contributors"
+      }).addTo(map);
+      L.marker([locationData.lat, locationData.lon]).addTo(map);
+    }
+  </script>
+{% endif %}
+</body>
+</html>

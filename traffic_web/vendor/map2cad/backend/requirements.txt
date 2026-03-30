@@ -1,0 +1,9 @@
+flask==3.1.1
+flask-cors==5.0.1
+shapely==2.1.0
+pyproj==3.7.1
+ezdxf==1.4.2
+requests==2.32.3
+gunicorn==23.0.0
+pytest==8.3.5
+pytest-cov==6.1.1

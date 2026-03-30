@@ -1,0 +1,155 @@
+{% extends "admin/base.html" %}
+{% block content %}
+  <h1>Run {{ run.id }}</h1>
+  <div style="margin-bottom:12px;">
+    <a class="btn btn-primary" href="/admin/runs/{{ run.id }}/edit">Edit Run</a>
+  </div>
+  <div class="box">
+    <table>
+      <tr><th>Video ID</th><td>{{ run.job_id }}</td></tr>
+      <tr><th>Title</th><td>{{ run.title or "" }}</td></tr>
+      <tr><th>Place</th><td>{{ run.place or "" }}</td></tr>
+      <tr><th>Recorded At</th><td>{{ run.recorded_at or "" }}</td></tr>
+      <tr><th>Status</th><td>{{ run.status }}</td></tr>
+      <tr><th>Owner</th><td>{{ run.owner_user_id or "" }}</td></tr>
+      <tr><th>Video</th><td>{{ run.video_filename or "" }}</td></tr>
+      <tr><th>Created</th><td>{{ run.created_at }}</td></tr>
+      <tr><th>Started</th><td>{{ run.started_at or "" }}</td></tr>
+      <tr><th>Finished</th><td>{{ run.finished_at or "" }}</td></tr>
+    </table>
+  </div>
+
+  {% if outputs.overlay_video %}
+    <div class="box">
+      <h3>Downloads</h3>
+      <div style="display:flex; gap:12px; flex-wrap:wrap;">
+        <a class="btn btn-outline" href="{{ outputs.overlay_video }}" download>Download Overlay</a>
+        <a class="btn btn-outline" href="{{ outputs.heatmap }}" download>Download Heatmap</a>
+        {% if outputs.heatmap_video %}
+          <a class="btn btn-outline" href="{{ outputs.heatmap_video }}" download>Download Heatmap Video</a>
+        {% endif %}
+        <a class="btn btn-outline" href="{{ outputs.results_json }}" download>Download results.json</a>
+        <a class="btn btn-outline" href="{{ outputs.report_xlsx }}" download>Download report.xlsx</a>
+      </div>
+    </div>
+
+    <div class="grid grid-2" style="margin-top:16px;">
+      <div class="card">
+        <h3>Overlay Video</h3>
+        <video controls>
+          <source src="{{ outputs.overlay_video }}" type="video/mp4">
+        </video>
+      </div>
+      <div class="card">
+        <h3>{% if outputs.heatmap_video %}Heatmap Video{% else %}Heatmap Image{% endif %}</h3>
+        {% if outputs.heatmap_video %}
+          <video controls>
+            <source src="{{ outputs.heatmap_video }}" type="video/mp4">
+          </video>
+        {% else %}
+          <img src="{{ outputs.heatmap }}" alt="Heatmap">
+        {% endif %}
+      </div>
+    </div>
+
+    {% if class_count_rows %}
+      <div class="box" style="margin-top:16px;">
+        <h3>Detections by Type</h3>
+        <table>
+          <tr>
+            <th>Type</th>
+            <th>Count</th>
+          </tr>
+          {% for row in class_count_rows %}
+            <tr>
+              <td>{{ row.label }}</td>
+              <td>{{ row.count }}</td>
+            </tr>
+          {% endfor %}
+        </table>
+      </div>
+    {% endif %}
+
+    {% if zone_rows %}
+      <div class="box" style="margin-top:16px;">
+        <h3>Counts by Zone</h3>
+        <table>
+          <tr>
+            <th>Zone</th>
+            <th>Entry</th>
+            <th>Exit</th>
+          </tr>
+          {% for row in zone_rows %}
+            <tr>
+              <td>{{ row.zone }}</td>
+              <td>{{ row.entry }}</td>
+              <td>{{ row.exit }}</td>
+            </tr>
+          {% endfor %}
+        </table>
+      </div>
+    {% endif %}
+
+    <div class="box" style="margin-top:16px;">
+      <h3>OD Flows</h3>
+      <table>
+        <tr>
+          <th>Entry</th>
+          <th>Exit</th>
+          <th>Count</th>
+        </tr>
+        {% if od_rows %}
+          {% for row in od_rows %}
+            <tr>
+              <td>{{ row.entry }}</td>
+              <td>{{ row.exit }}</td>
+              <td>{{ row.count }}</td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="3">No OD flows yet.</td>
+          </tr>
+        {% endif %}
+      </table>
+    </div>
+
+    {% if od_matrix.cols %}
+      <div class="box" style="margin-top:16px;">
+        <h3>OD Matrix</h3>
+        <table>
+          <tr>
+            <th>Entry / Exit</th>
+            {% for col in od_matrix.cols %}
+              <th>{{ col }}</th>
+            {% endfor %}
+          </tr>
+          {% for row in od_matrix.rows %}
+            <tr>
+              <td>{{ row.entry }}</td>
+              {% for count in row.counts %}
+                <td>{{ count }}</td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </table>
+      </div>
+    {% endif %}
+  {% endif %}
+
+  <div class="grid grid-2" style="margin-top:16px;">
+    <div class="card">
+      <h3>Metrics (JSON)</h3>
+      <pre>{{ metrics_raw }}</pre>
+    </div>
+    <div class="card">
+      <h3>Config (JSON)</h3>
+      <pre>{{ config_raw }}</pre>
+    </div>
+  </div>
+
+  <div class="box" style="margin-top:16px;">
+    <h3>Outputs (JSON)</h3>
+    <pre>{{ outputs_raw }}</pre>
+  </div>
+{% endblock %}
